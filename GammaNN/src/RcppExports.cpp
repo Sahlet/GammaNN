@@ -6,7 +6,7 @@
 using namespace Rcpp;
 
 // rcpp_hello
-List rcpp_hello();
+Rcpp::List rcpp_hello();
 RcppExport SEXP GammaNN_rcpp_hello() {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;

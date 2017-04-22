@@ -299,3 +299,7 @@ ModelManifest.xml
 !GammaNN/src/My/
 GammaNN/src/My/*
 !GammaNN/src/My/Perceptron.*
+*.sln
+*.vcxproj
+*.filters
+GammaNN_0.1.0.tar.gz
