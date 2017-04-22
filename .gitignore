@@ -299,6 +299,8 @@ ModelManifest.xml
 !GammaNN/src/My/
 GammaNN/src/My/*
 !GammaNN/src/My/Perceptron.*
+!GammaNN/src/My/matrix.*
+!GammaNN/src/My/string.*
 *.sln
 *.vcxproj
 *.filters
