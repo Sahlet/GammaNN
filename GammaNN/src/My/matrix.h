@@ -22,7 +22,7 @@ class matrix {
 	typedef T (*abs_)(const matrix&);
 	static abs_ abs_ptr;
 private:
-	US w, h;
+	US w = 0, h = 0;
 	std::vector< T > vec;
 public:
 	typedef typename std::vector<T>::iterator iterator;
@@ -35,6 +35,29 @@ public:
 
 	matrix(const std::vector<T>& v) : w(v.size()), h(1), vec(v) {}
 	matrix(std::vector<T>&& v) : w(v.size()), h(1), vec(std::move(v)) {}
+	matrix(const US& width, const US& height, const std::vector<T>& v) : w(width), h(height) {
+		if (width * height != v.size()) throw std::invalid_argument("width * height != v.size()");
+		vec = v;
+	}
+	matrix(const US& width, const US& height, std::vector<T>&& v) : w(width), h(height) {
+		if (width * height != v.size()) throw std::invalid_argument("width * height != v.size()");
+		vec = std::move(v);
+	}
+	matrix(std::initializer_list< std::vector< T > > list) {
+		if (!(h = list.size())) return;
+		w = list.begin()->size();
+		for (const std::vector< T >& v : list) {
+			if (v.size() != w) throw std::invalid_argument("vectors in initializer_list have different size");
+		}
+
+		vec.resize(w*h);
+		auto data = vec.data();
+		for (const std::vector< T >& v : list) {
+			for (auto& obj : v) {
+				*data++ = std::move(obj);
+			}
+		}
+	}
 
 	matrix& operator = (const std::vector<T>& v) {
 		return (*this) = matrix(v);
@@ -243,6 +266,20 @@ public:
 		return res.str();
 	}
 };
+
+template<class T>
+std::vector<T> operator*(const std::vector<T>& v, const matrix<T>& m) throw(std::exception) {
+	if (v.size() != m.height()) throw std::runtime_error("v.size() != w");
+	std::vector<T> res(m.width());
+	auto data = vec.data();
+	auto iter = m.begin();
+	for (US i = 0; i < h; i++) {
+		for (US j = 0; j < w; j++) {
+			res[j] += *iter++ * v[i];
+		}
+	}
+	return res;
+}
 
 template<class T>
 std::string to_string(const matrix<T>& m) {

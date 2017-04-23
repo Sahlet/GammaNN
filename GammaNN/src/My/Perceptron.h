@@ -8,16 +8,19 @@
 #include <memory>
 #include <stdexcept>
 
-//#include <My/matrix.h>
+#include <My/matrix.h>
 
 namespace My {
 
-	struct Perceptron {
-		struct flushable {};
-	private:
-		//std::vector< matrix< double > > weights;
-		std::unique_ptr< flushable > context;
+	class Perceptron {
+		std::vector< matrix< double > > weights;
 		bool last_is_linear = false;
+
+		struct flushable {
+			std::vector< matrix< double > > weights_gradients;
+			std::vector< std::vector< double > > outputs;
+		};
+		std::unique_ptr< flushable > context;
 
 		template< template< class > class Container, class T >
 		inline static std::vector< T > to_vector(const Container< T >& container) throw (std::out_of_range) {
@@ -36,9 +39,9 @@ namespace My {
 		void move(Perceptron& p) noexcept;
 	public:
 		Perceptron(
-			int inputs = 1,
-			const std::vector< int >& hidden = std::vector< int >(),
-			int outs = 1,
+			US inputs = 0,
+			US outputs = 0,
+			const std::vector< US >& hidden = std::vector< US >(),
 			bool linear_outs = false
 		) throw (std::invalid_argument);
 		Perceptron(const Perceptron& p) { this->copy(p); }
@@ -53,46 +56,49 @@ namespace My {
 
 		template< template< class > class Container >
 		Perceptron(
-			int inputs,
-			const Container< int >& hidden,
-			int outs = 1,
+			US inputs,
+			US outputs,
+			const Container< US >& hidden,
 			bool linear_outs = false
-		) throw (std::out_of_range, std::invalid_argument) : Perceptron(intputs, std::move(to_vector(hidden)), outs, linear_outs) {}
+		) throw (std::out_of_range, std::invalid_argument) : Perceptron(intputs, outputs, std::move(to_vector(hidden)), linear_outs) {}
+
+		int inputs_count() const { return weights.front().height(); }
+		int outputs_count() const { return weights.back().width(); }
+
+		std::vector< double > operator()(std::vector< double > input) const throw (std::invalid_argument);
+		std::vector< double > forward_prop(std::vector< double > input) throw (std::invalid_argument);
 
 		void flush();
 		bool flushed() { return !context; }
+		bool is_last_linear() { return last_is_linear; }
 
-		std::vector< double > operator()(const std::vector< double >& input) const;
+		//errors in back_prop method
+		typedef std::vector< double > errors;
+
+		//for building composite structures where this object is intermediate
+		//-- parameter 'errors' is errors that passing to outputs of perceptron (back_prop method)
+		//-- parameter 'flush' responds for changing weights: if flush is true - weights changes in the function; if flush is false - gradients of weights will accumulate
+		//-- result of function is errors of perceptron inputs (vector of inputs errors = (SCALAR_PRODUCT((deltas next layer),weights(from input to next layer)) where input = 1:inputs_count))
+		errors put_errors(errors e, bool flush = true) throw (std::runtime_error);
 
 		struct pattern {
 			const std::vector< double >& input;
 			const std::vector< double >& output;
 		};
 
-		//deltas in back_prop method
-		typedef std::unique_ptr< std::vector< double > > deltas;
-
-		//for building composite structures where this object is intermediate
-		//-- parameter 'deltas' is deltas that passing to outputs of perceptron (back_prop method)
-		//-- parameter 'flush' responds for changing weights: if flush is true - weights changes in the function; if flush is false - gradients of weights will accumulate
-		//-- result of function is deltas of perceptron inputs
-		deltas put_deltas(deltas d, bool flush = true);
-
-		struct back_prop_param : pattern, deltas {};
-
 		//returns ERROR value
-		double back_prop(const back_prop_param& param) {
-			return back_prop({ param });
+		double back_prop(const pattern& p) throw (std::invalid_argument) {
+			return back_prop({ p });
 		}
 
 		//returns sum of ERROR values
 		template< template< class > class Container >
-		double back_prop (const Container< back_prop_param >& params) throw (std::out_of_range) {
-			return back_prop(std::move(to_vector(params)));
+		double back_prop (const Container< pattern >& patterns) throw (std::out_of_range, std::invalid_argument) {
+			return back_prop(std::move(to_vector(patterns)));
 		}
 		
 		//returns sum of ERROR values
-		double back_prop(const std::vector< back_prop_param >& params);
+		double back_prop(const std::vector< pattern >& patterns) throw (std::invalid_argument);
 
 		void write_to_stream(std::ostream& os) const;
 		static Perceptron from_stream(std::istream& is);
