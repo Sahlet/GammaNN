@@ -2,7 +2,10 @@
 #define __PERCEPTRON_CPP__
 
 #include "Perceptron.h"
-#include <iostream>
+#include <istream>
+#include <ostream>
+#include <type_traits>
+
 
 #ifndef __PRETTY_FUNCTION__
 #define __PRETTY_FUNCTION__ __func__
@@ -44,6 +47,64 @@ namespace My {
 			for (int i = 0; i < v1.size(); i++) { res[i] = v1[i] + v2[i]; }
 			return std::move(res);
 		}
+
+		//-----------------------------------------------------------------------
+		//SERIALIZE
+		template< class T >
+		typename std::enable_if_t<std::is_fundamental<T>::value || std::is_enum<T>::value, std::ostream& >
+			operator&(std::ostream& os, const T& v) {
+			os.write((const char*)&v, sizeof(T));
+			return os;
+		}
+		template< class T >
+		typename std::enable_if_t<std::is_fundamental<T>::value || std::is_enum<T>::value, std::istream& >
+			operator&(std::istream& is, T& v) {
+			is.read((char*)&v, sizeof(T));
+			return is;
+		}
+		template< class T >
+		typename std::enable_if_t<std::is_compound<T>::value && !std::is_enum<T>::value, std::ostream& >
+			operator&(std::ostream& os, const T& obj) {
+			serialize(os, obj);
+			return os;
+		}
+		template< class T >
+		typename std::enable_if_t<std::is_compound<T>::value && !std::is_enum<T>::value, std::istream& >
+			operator&(std::istream& is, T& obj) {
+			serialize(is, obj);
+			return is;
+		}
+		
+		//-----------------------------------------------------------------------
+		//VECTOR SERIALIZE
+		template< class T >
+		void serialize(std::ostream& os, const std::vector< T >& v) {
+			os & v.size();
+			for (auto& obj : v) { os & obj; }
+		}
+		template< class T >
+		void serialize(std::istream& is, std::vector< T >& v) {
+			std::vector< T >::size_type size;
+			is & size;
+			v.resize(size);
+			for (auto& obj : v) { is & obj; }
+		}
+
+		//-----------------------------------------------------------------------
+		//MATRIX SERIALIZE
+		template< class T >
+		void serialize(std::ostream& os, const matrix< T >& m) {
+			os & m.width() & m.height();
+			for (auto& obj : m) { os & obj; }
+		}
+		template< class T >
+		void serialize(std::istream& is, matrix< T >& m) {
+			US w, h;
+			is & w & h;
+			m = matrix< T >(w, h);
+			for (auto& obj : m) { is & obj; }
+		}
+
 	}
 
 	void Perceptron::copy(const Perceptron& p) {
@@ -155,7 +216,7 @@ namespace My {
 	}
 
 	double Perceptron::back_prop(const std::vector< pattern >& patterns) throw (std::invalid_argument) {
-		if (!patterns.size()) return;
+		if (!patterns.size()) return 0;
 		for (const auto& p : patterns) {
 			if ((p.input.size() != inputs_count()) || (p.output.size() != outputs_count()))
 				throw std::invalid_argument("some of patterns has wrong size");
@@ -177,17 +238,34 @@ namespace My {
 	}
 
 	void Perceptron::write_to_stream(std::ostream& os) const {
+		bool there_is_context = (bool)context;
 
+		os & weights & last_is_linear & there_is_context;
+
+		if (there_is_context) {
+			os & context->weights_gradients & context->outputs;
+		}
 	}
-	Perceptron Perceptron::from_stream(std::istream& is) { return Perceptron(); }
+	Perceptron Perceptron::from_stream(std::istream& is) {
+		Perceptron p;
+		bool there_is_context;
+
+		is & p.weights & p.last_is_linear & there_is_context;
+
+		if (there_is_context) {
+			p.context.reset(new flushable);
+			is & p.context->weights_gradients & p.context->outputs;
+		}
+		return std::move(p);
+	}
 }
 
-std::ostream& operator << (std::ostream& os, const My::Perceptron& p) {
+std::ostream& operator & (std::ostream& os, const My::Perceptron& p) {
 	p.write_to_stream(os);
 	return os;
 }
 
-std::istream& operator >> (std::istream& is, My::Perceptron& p) {
+std::istream& operator & (std::istream& is, My::Perceptron& p) {
 	p = std::move(My::Perceptron::from_stream(is));
 	return is;
 }

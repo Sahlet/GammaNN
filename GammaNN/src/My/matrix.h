@@ -271,10 +271,9 @@ template<class T>
 std::vector<T> operator*(const std::vector<T>& v, const matrix<T>& m) throw(std::exception) {
 	if (v.size() != m.height()) throw std::runtime_error("v.size() != w");
 	std::vector<T> res(m.width());
-	auto data = vec.data();
 	auto iter = m.begin();
-	for (US i = 0; i < h; i++) {
-		for (US j = 0; j < w; j++) {
+	for (US i = 0; i < m.height(); i++) {
+		for (US j = 0; j < m.width(); j++) {
 			res[j] += *iter++ * v[i];
 		}
 	}

@@ -1,6 +1,8 @@
 #include<assert.h>
 #include<My/Perceptron.h>
 #include <My/matrix.h>
+#include<fstream>
+#include<iostream>
 
 int main() {
 
@@ -9,7 +11,9 @@ int main() {
 
 	assert(m == My::matrix< double >({ {6, 14} }));
 
-	//My::Perceptron p(3);
+	My::Perceptron p(3);
+
+	std::cout & p;
 
     return 0;
 }

@@ -105,8 +105,8 @@ namespace My {
 	};
 }
 
-std::ostream& operator << (std::ostream& os, const My::Perceptron& p);
+std::ostream& operator & (std::ostream& os, const My::Perceptron& p);
 
-std::istream& operator >> (std::istream& is, My::Perceptron& p);
+std::istream& operator & (std::istream& is, My::Perceptron& p);
 
 #endif
