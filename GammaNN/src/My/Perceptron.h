@@ -14,7 +14,9 @@ namespace My {
 
 	class Perceptron {
 		std::vector< matrix< double > > weights;
-		bool last_is_linear = false;
+		
+		//there is some problems with training NN with linear outputs
+		//bool last_is_linear = false;
 
 		struct flushable {
 			std::vector< matrix< double > > weights_gradients;
@@ -41,8 +43,8 @@ namespace My {
 		Perceptron(
 			US inputs = 0,
 			US outputs = 0,
-			const std::vector< US >& hidden = std::vector< US >(),
-			bool linear_outs = false
+			const std::vector< US >& hidden = std::vector< US >()
+			//,bool linear_outs = false
 		) throw (std::invalid_argument);
 		Perceptron(const Perceptron& p) { this->copy(p); }
 		Perceptron(Perceptron&& p) noexcept { this->move(p); }
@@ -62,7 +64,7 @@ namespace My {
 
 		void flush();
 		bool flushed() { return !context; }
-		bool is_last_linear() { return last_is_linear; }
+		//bool is_last_linear() { return last_is_linear; }
 
 		//errors in back_prop method
 		typedef std::vector< double > errors;
@@ -78,9 +80,7 @@ namespace My {
 			const std::vector< double >& output;
 
 			pattern(const std::pair< std::vector< double >, std::vector< double > >& data) :
-			input(data.first), output(data.second) {
-				int i = 0;
-			}
+				input(data.first), output(data.second) {}
 		};
 
 		//returns sum of ERROR values
@@ -88,7 +88,7 @@ namespace My {
 
 		//returns ERROR value
 		double back_prop(const pattern& p) throw (std::invalid_argument) {
-			return back_prop({ p });
+			return back_prop(std::vector< pattern >{ p });
 		}
 
 		//returns sum of ERROR values
