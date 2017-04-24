@@ -30,22 +30,37 @@ namespace My {
 			return std::move(X);
 		}
 
+#define VEC_OPERATIONS(OPERATOR)\
+		std::vector< double > operator##OPERATOR(const std::vector< double >& v1, const std::vector< double >& v2) {\
+			if (v1.size() != v2.size()) throw std::invalid_argument("v1 and v2 have different dimensions");\
+			std::vector< double > res(v1.size());\
+			for (int i = 0; i < v1.size(); i++) { res[i] = v1[i] OPERATOR v2[i]; }\
+			return std::move(res);\
+		}\
+		std::vector< double >& operator##OPERATOR##=(std::vector< double >& v1, const double& v2) {\
+			for (int i = 0; i < v1.size(); i++) { v1[i] OPERATOR##= v2; }\
+			return v1;\
+		}\
+		std::vector< double >& operator##OPERATOR##=(std::vector< double >& v1, const std::vector< double >& v2) {\
+			if (v1.size() != v2.size()) throw std::invalid_argument("v1 and v2 have different dimensions");\
+			for (int i = 0; i < v1.size(); i++) { v1[i] OPERATOR##= v2[i]; }\
+			return v1;\
+		}\
+		std::vector< double > operator##OPERATOR(const std::vector< double >& v1, const double& v2) {\
+			std::vector< double > res(v1.size());\
+			for (int i = 0; i < v1.size(); i++) { res[i] = v1[i] OPERATOR v2; }\
+			return std::move(res);\
+		}\
+		std::vector< double > operator##OPERATOR(const double& v1, const std::vector< double >& v2) {\
+			return v2 OPERATOR v1;\
+		}
+
+		VEC_OPERATIONS(+);
+		VEC_OPERATIONS(-);
+		VEC_OPERATIONS(*);
+
 		std::vector< double > operator-(const std::vector< double >& v) {
-			std::vector< double > res(v);
-			for (auto& obj : res) { obj = -obj; }
-			return std::move(res);
-		}
-		std::vector< double > operator-(const std::vector< double >& v1, const std::vector< double >& v2) {
-			if (v1.size() != v2.size()) throw std::invalid_argument("v1 and v2 have different dimensions");
-			std::vector< double > res(v1.size());
-			for (int i = 0; i < v1.size(); i++) { res[i] = v1[i] - v2[i]; }
-			return std::move(res);
-		}
-		std::vector< double > operator+(const std::vector< double >& v1, const std::vector< double >& v2) {
-			if (v1.size() != v2.size()) throw std::invalid_argument("v1 and v2 have different dimensions");
-			std::vector< double > res(v1.size());
-			for (int i = 0; i < v1.size(); i++) { res[i] = v1[i] + v2[i]; }
-			return std::move(res);
+			return v * -1;
 		}
 
 		//-----------------------------------------------------------------------
@@ -193,8 +208,31 @@ namespace My {
 
 		context->weights_gradients.resize(weights.size());
 
-		/*for () {
-		}*/
+		auto w_iter = weights.rbegin();
+		auto g_iter = context->weights_gradients.rbegin();
+		auto o_iter = context->outputs.rbegin(), pred_o_iter = std::next(o_iter);
+
+		const double speaad = 1;
+
+		for (; w_iter != weights.rend(); w_iter++, g_iter++, o_iter++, pred_o_iter++) {
+			
+			if (last_is_linear && &*w_iter == &weights.back()) e *= -1;
+			else e *= *o_iter * (1 - *o_iter);
+
+			if (g_iter->width() != w_iter->width() || g_iter->height() != w_iter->height()) {
+				*g_iter = matrix< double >(w_iter->width(), w_iter->height());
+			}
+
+			*g_iter -= speaad * (
+				matrix< double >(1, pred_o_iter->size(), *pred_o_iter)
+				*
+				matrix< double >(e.size(), 1, e)
+				);
+
+			e = *w_iter * e;
+		}
+
+		context->outputs.clear();
 
 		if (flush) {
 			this->flush();
@@ -234,7 +272,7 @@ namespace My {
 
 		flush();
 
-		return global_error;
+		return global_error / 2;
 	}
 
 	void Perceptron::write_to_stream(std::ostream& os) const {
