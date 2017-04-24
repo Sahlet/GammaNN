@@ -281,12 +281,12 @@ std::vector<T> operator*(const std::vector<T>& v, const matrix<T>& m) throw(std:
 }
 
 template<class T>
-matrix<T> operator*(const T& t, const matrix<T>& m) const {
+matrix<T> operator*(const T& t, const matrix<T>& m) {
 	return m * t;
 }
 
 template<class T>
-matrix<T> operator+(const T& t, const matrix<T>& m) const {
+matrix<T> operator+(const T& t, const matrix<T>& m) {
 	return m + t;
 }
 

@@ -24,7 +24,7 @@ namespace My {
 		}
 
 		inline std::vector< double > use_for_vec(std::vector< double > X, double f(double x)) {
-			if (!f) for (auto& x : X) {
+			if (f) for (auto& x : X) {
 				x = f(x);
 			}
 			return std::move(X);
@@ -149,16 +149,17 @@ namespace My {
 	{
 		if (!(inputs && outputs)) {
 			weights.resize(1);
+			weights[0] = matrix<double>(0, 1);
 			return;
 		}
 
 		for (int layer_size : hidden) {
-			if (layer_size <= 0) throw std::invalid_argument("Perceptron(): layer_size == 0");
+			if (!layer_size) throw std::invalid_argument("Perceptron(): layer_size == 0");
 		}
 
 		weights.resize(1 + hidden.size());
 
-		int height = inputs;
+		int height = inputs + 1;
 		
 		for (int i = 0; i <= hidden.size(); i++) {
 			int width = (i == hidden.size()) ? outputs : hidden[i];
@@ -169,15 +170,19 @@ namespace My {
 				weight = (1 - 2*(std::rand()%2)) * (1 + (std::rand() % 100) / 10.0);
 			}
 
-			height = width;
+			height = width + 1;
 		}
 	}
 
 	Perceptron::~Perceptron() {}
 
+	int Perceptron::inputs_count() const { return weights.front().height() - 1; }
+	int Perceptron::outputs_count() const { return weights.back().width(); }
+
 	std::vector< double > Perceptron::operator()(std::vector< double > input) const throw (std::invalid_argument) {
 		if (input.size() != inputs_count()) throw std::invalid_argument("input.size() != inputs_count()");
 		for (const auto& weight : weights) {
+			input.push_back(1);
 			input = use_for_vec(
 				input * weight,
 				(last_is_linear && &weight == &weights.back()) ? nullptr : sigmoid
@@ -193,6 +198,7 @@ namespace My {
 
 		auto outputs_ptr = context->outputs.data();
 		for (const auto& weight : weights) {
+			input.push_back(1);
 			input = use_for_vec(
 				(*outputs_ptr++ = std::move(input)) * weight,
 				(last_is_linear && &weight == &weights.back()) ? nullptr : sigmoid
@@ -204,7 +210,7 @@ namespace My {
 
 	Perceptron::errors Perceptron::put_errors(errors e, bool flush) throw (std::runtime_error) {
 		if (e.size() != outputs_count()) throw (std::invalid_argument("e.size() != outputs_count()"));
-		if (!context || context->outputs.size() != weights.size()) throw (std::runtime_error("wrong context"));
+		if (!context || context->outputs.size() != (weights.size() + 1)) throw (std::runtime_error("wrong context"));
 
 		context->weights_gradients.resize(weights.size());
 
@@ -212,7 +218,7 @@ namespace My {
 		auto g_iter = context->weights_gradients.rbegin();
 		auto o_iter = context->outputs.rbegin(), pred_o_iter = std::next(o_iter);
 
-		const double speaad = 1;
+		const double speaad = 0.5;
 
 		for (; w_iter != weights.rend(); w_iter++, g_iter++, o_iter++, pred_o_iter++) {
 			
@@ -230,6 +236,9 @@ namespace My {
 				);
 
 			e = *w_iter * e;
+
+			pred_o_iter->resize(pred_o_iter->size() - 1);
+			e.resize(e.size() - 1);
 		}
 
 		context->outputs.clear();
@@ -242,6 +251,12 @@ namespace My {
 	}
 
 	void Perceptron::flush() {
+		struct guard {
+			Perceptron* This;
+			guard(Perceptron* This) : This(This) {}
+			~guard() { This->context.reset(); }
+		} guard(this);
+
 		if (!context) return;
 		if (!context->weights_gradients.size()) return;
 		
@@ -249,8 +264,6 @@ namespace My {
 		for (auto& weight : weights) {
 			weight += *iter++;
 		}
-
-		context.reset();
 	}
 
 	double Perceptron::back_prop(const std::vector< pattern >& patterns) throw (std::invalid_argument) {

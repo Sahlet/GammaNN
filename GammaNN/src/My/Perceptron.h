@@ -54,16 +54,8 @@ namespace My {
 			return *this;
 		}
 
-		template< template< class > class Container >
-		Perceptron(
-			US inputs,
-			US outputs,
-			const Container< US >& hidden,
-			bool linear_outs = false
-		) throw (std::out_of_range, std::invalid_argument) : Perceptron(intputs, outputs, std::move(to_vector(hidden)), linear_outs) {}
-
-		int inputs_count() const { return weights.front().height(); }
-		int outputs_count() const { return weights.back().width(); }
+		int inputs_count() const;
+		int outputs_count() const;
 
 		std::vector< double > operator()(std::vector< double > input) const throw (std::invalid_argument);
 		std::vector< double > forward_prop(std::vector< double > input) throw (std::invalid_argument);
@@ -84,7 +76,15 @@ namespace My {
 		struct pattern {
 			const std::vector< double >& input;
 			const std::vector< double >& output;
+
+			pattern(const std::pair< std::vector< double >, std::vector< double > >& data) :
+			input(data.first), output(data.second) {
+				int i = 0;
+			}
 		};
+
+		//returns sum of ERROR values
+		double back_prop(const std::vector< pattern >& patterns) throw (std::invalid_argument);
 
 		//returns ERROR value
 		double back_prop(const pattern& p) throw (std::invalid_argument) {
@@ -92,13 +92,14 @@ namespace My {
 		}
 
 		//returns sum of ERROR values
-		template< template< class > class Container >
-		double back_prop (const Container< pattern >& patterns) throw (std::out_of_range, std::invalid_argument) {
-			return back_prop(std::move(to_vector(patterns)));
+		double back_prop(const std::vector< std::pair < std::vector< double >, std::vector< double > > >& patterns1) throw (std::out_of_range, std::invalid_argument) {
+			std::vector< My::Perceptron::pattern > patterns;
+			patterns.reserve(patterns1.size());
+			for (auto& pattern : patterns1) {
+				patterns.emplace_back(pattern);
+			}
+			return back_prop(patterns);
 		}
-		
-		//returns sum of ERROR values
-		double back_prop(const std::vector< pattern >& patterns) throw (std::invalid_argument);
 
 		void write_to_stream(std::ostream& os) const;
 		static Perceptron from_stream(std::istream& is);
