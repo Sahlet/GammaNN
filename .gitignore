@@ -301,6 +301,13 @@ GammaNN/src/My/*
 !GammaNN/src/My/Perceptron.*
 !GammaNN/src/My/matrix.*
 !GammaNN/src/My/string.*
+
+!GammaNN/include/
+GammaNN/include/*
+!GammaNN/include/Perceptron.*
+!GammaNN/include/matrix.*
+!GammaNN/include/string.*
+
 *.sln
 *.vcxproj
 *.filters

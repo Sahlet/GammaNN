@@ -1,11 +1,10 @@
 #ifndef __PERCEPTRON_CPP__
 #define __PERCEPTRON_CPP__
 
-#include "Perceptron.h"
+#include <My/Perceptron.h>
 #include <istream>
 #include <ostream>
 #include <type_traits>
-
 
 #ifndef __PRETTY_FUNCTION__
 #define __PRETTY_FUNCTION__ __func__
@@ -29,37 +28,27 @@ namespace My {
 			}
 			return std::move(X);
 		}
-
-#define VEC_OPERATIONS(OPERATOR)\
-		std::vector< double > operator##OPERATOR(const std::vector< double >& v1, const std::vector< double >& v2) {\
+#define VEC_OPERATIONS(NAME, OPERATOR)\
+		std::vector< double > NAME(const std::vector< double >& v1, const std::vector< double >& v2) {\
 			if (v1.size() != v2.size()) throw std::invalid_argument("v1 and v2 have different dimensions");\
 			std::vector< double > res(v1.size());\
 			for (int i = 0; i < v1.size(); i++) { res[i] = v1[i] OPERATOR v2[i]; }\
 			return std::move(res);\
 		}\
-		std::vector< double >& operator##OPERATOR##=(std::vector< double >& v1, const double& v2) {\
-			for (int i = 0; i < v1.size(); i++) { v1[i] OPERATOR##= v2; }\
-			return v1;\
-		}\
-		std::vector< double >& operator##OPERATOR##=(std::vector< double >& v1, const std::vector< double >& v2) {\
-			if (v1.size() != v2.size()) throw std::invalid_argument("v1 and v2 have different dimensions");\
-			for (int i = 0; i < v1.size(); i++) { v1[i] OPERATOR##= v2[i]; }\
-			return v1;\
-		}\
-		std::vector< double > operator##OPERATOR(const std::vector< double >& v1, const double& v2) {\
+		std::vector< double > NAME(const std::vector< double >& v1, const double& v2) {\
 			std::vector< double > res(v1.size());\
 			for (int i = 0; i < v1.size(); i++) { res[i] = v1[i] OPERATOR v2; }\
 			return std::move(res);\
 		}\
-		std::vector< double > operator##OPERATOR(const double& v1, const std::vector< double >& v2) {\
+		std::vector< double > NAME(const double& v1, const std::vector< double >& v2) {\
 			std::vector< double > res(v2.size());\
 			for (int i = 0; i < v2.size(); i++) { res[i] = v1 OPERATOR v2[i]; }\
 			return std::move(res);\
 		}
 
-		VEC_OPERATIONS(+);
-		VEC_OPERATIONS(-);
-		VEC_OPERATIONS(*);
+		VEC_OPERATIONS(operator+, +);
+		VEC_OPERATIONS(operator-, -);
+		VEC_OPERATIONS(operator*, *);
 
 		std::vector< double > operator-(const std::vector< double >& v) {
 			return v * -1;
@@ -68,30 +57,24 @@ namespace My {
 		//-----------------------------------------------------------------------
 		//SERIALIZE
 		template< class T >
-		typename std::enable_if_t<std::is_fundamental<T>::value || std::is_enum<T>::value, std::ostream& >
+		typename std::enable_if<std::is_fundamental<T>::value || std::is_enum<T>::value, std::ostream& >::type
 			operator&(std::ostream& os, const T& v) {
 			os.write((const char*)&v, sizeof(T));
 			return os;
 		}
 		template< class T >
-		typename std::enable_if_t<std::is_fundamental<T>::value || std::is_enum<T>::value, std::istream& >
+		typename std::enable_if<std::is_fundamental<T>::value || std::is_enum<T>::value, std::istream& >::type
 			operator&(std::istream& is, T& v) {
 			is.read((char*)&v, sizeof(T));
 			return is;
 		}
 		template< class T >
-		typename std::enable_if_t<std::is_compound<T>::value && !std::is_enum<T>::value, std::ostream& >
-			operator&(std::ostream& os, const T& obj) {
-			serialize(os, obj);
-			return os;
-		}
+		typename std::enable_if<std::is_compound<T>::value && !std::is_enum<T>::value, std::ostream& >::type
+			operator&(std::ostream& os, const T& obj);
 		template< class T >
-		typename std::enable_if_t<std::is_compound<T>::value && !std::is_enum<T>::value, std::istream& >
-			operator&(std::istream& is, T& obj) {
-			serialize(is, obj);
-			return is;
-		}
-		
+		typename std::enable_if<std::is_compound<T>::value && !std::is_enum<T>::value, std::istream& >::type
+			operator&(std::istream& is, T& obj);
+
 		//-----------------------------------------------------------------------
 		//VECTOR SERIALIZE
 		template< class T >
@@ -101,7 +84,7 @@ namespace My {
 		}
 		template< class T >
 		void serialize(std::istream& is, std::vector< T >& v) {
-			std::vector< T >::size_type size;
+			typename std::vector< T >::size_type size;
 			is & size;
 			v.resize(size);
 			for (auto& obj : v) { is & obj; }
@@ -122,13 +105,28 @@ namespace My {
 			for (auto& obj : m) { is & obj; }
 		}
 
+		//-----------------------------------------------------------------------
+		//SERIALIZE
+		template< class T >
+		typename std::enable_if<std::is_compound<T>::value && !std::is_enum<T>::value, std::ostream& >::type
+		  operator&(std::ostream& os, const T& obj) {
+		    serialize(os, obj);
+		    return os;
+		}
+		template< class T >
+		typename std::enable_if<std::is_compound<T>::value && !std::is_enum<T>::value, std::istream& >::type
+		  operator&(std::istream& is, T& obj) {
+		    serialize(is, obj);
+		    return is;
+		}
+
 	}
 
 	void Perceptron::copy(const Perceptron& p) {
 		if (this == &p) return;
 		weights = p.weights;
 		//last_is_linear = p.last_is_linear;
-		
+
 		context.reset();
 		if (p.context) {
 			context.reset(new flushable(*p.context));
@@ -165,10 +163,10 @@ namespace My {
 		weights.resize(1 + hidden.size());
 
 		int height = inputs + 1;
-		
+
 		for (int i = 0; i <= hidden.size(); i++) {
 			int width = (i == hidden.size()) ? outputs : hidden[i];
-			
+
 			weights[i] = matrix< double >(width, height);
 
 			//for (auto& weight : weights[i]) {
@@ -236,9 +234,9 @@ namespace My {
 		const double speaad = 1;
 
 		for (; w_iter != weights.rend(); w_iter++, g_iter++, o_iter++, pred_o_iter++) {
-			
+
 			//if (!(last_is_linear && &*w_iter == &weights.back()))
-			e *= *o_iter * (1 - *o_iter);
+			e = *o_iter * (1 - *o_iter) * e;
 
 			if (g_iter->width() != w_iter->width() || g_iter->height() != w_iter->height()) {
 				*g_iter = matrix< double >(w_iter->width(), w_iter->height());
@@ -274,7 +272,7 @@ namespace My {
 
 		if (!context) return;
 		if (!context->weights_gradients.size()) return;
-		
+
 		auto iter = context->weights_gradients.begin();
 		for (auto& weight : weights) {
 			weight += *iter++;
