@@ -4,4 +4,7 @@
 rcpp_hello <- function() {
     .Call('GammaNN_rcpp_hello', PACKAGE = 'GammaNN')
 }
+test <- function() {
+  .Call('GammaNN_test', PACKAGE = 'GammaNN');
+}
 

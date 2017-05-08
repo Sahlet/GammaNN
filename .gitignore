@@ -311,4 +311,6 @@ GammaNN/include/*
 *.sln
 *.vcxproj
 *.filters
+*.o
+*.so
 GammaNN_0.1.0.tar.gz

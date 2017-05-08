@@ -226,6 +226,7 @@ namespace My {
 		if (!context || context->outputs.size() != (weights.size() + 1)) throw (std::runtime_error("wrong context"));
 
 		context->weights_gradients.resize(weights.size());
+		context->flushed = false;
 
 		auto w_iter = weights.rbegin();
 		auto g_iter = context->weights_gradients.rbegin();
@@ -254,8 +255,6 @@ namespace My {
 			e.resize(e.size() - 1);
 		}
 
-		context->outputs.clear();
-
 		if (flush) {
 			this->flush();
 		}
@@ -264,18 +263,17 @@ namespace My {
 	}
 
 	void Perceptron::flush() {
-		struct guard {
-			Perceptron* This;
-			guard(Perceptron* This) : This(This) {}
-			~guard() { This->context.reset(); }
-		} guard(this);
-
-		if (!context) return;
+		if (flushed()) return;
+		context->flushed = true;
 		if (!context->weights_gradients.size()) return;
 
 		auto iter = context->weights_gradients.begin();
 		for (auto& weight : weights) {
-			weight += *iter++;
+			weight += *iter;
+		  for (auto& value : *iter) {
+		    value = 0;
+		  }
+		  iter++;
 		}
 	}
 
@@ -307,7 +305,7 @@ namespace My {
 		os & weights & /*last_is_linear & */there_is_context;
 
 		if (there_is_context) {
-			os & context->weights_gradients & context->outputs;
+			os & context->weights_gradients & context->outputs & context->flushed;
 		}
 	}
 	Perceptron Perceptron::from_stream(std::istream& is) {
@@ -318,7 +316,7 @@ namespace My {
 
 		if (there_is_context) {
 			p.context.reset(new flushable);
-			is & p.context->weights_gradients & p.context->outputs;
+			is & p.context->weights_gradients & p.context->outputs & p.context->flushed;
 		}
 		return std::move(p);
 	}

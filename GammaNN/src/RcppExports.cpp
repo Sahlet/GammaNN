@@ -15,3 +15,11 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
+
+// test
+Rcpp::RObject test();
+RcppExport SEXP GammaNN_test() {
+  BEGIN_RCPP
+  return Rcpp::wrap(test());
+  END_RCPP
+}
