@@ -27,39 +27,76 @@ void XOR_test(
     std::vector< My::Perceptron::pattern >& patterns
     ) {
   p = My::Perceptron(2, 1, { 2 });
-  patterns = std::vector< My::Perceptron::pattern >{
-    {
-      { 0, 0 },{ 0 }
-    }
-    ,
-    {
-      { 0.1, 0.1 },{ 0 }
-    }
-    ,
-    {
-      { 0, 1 },{ 1 }
-    }
-    ,
-    {
-      { 0.1, 0.9 },{ 1 }
-    }
-    ,
-    {
-      { 1, 0 },{ 1 }
-    }
-    ,
-    {
-      { 0.9, 0.1 },{ 1 }
-    }
-    ,
+
+    // patterns = std::vector< My::Perceptron::pattern >{
+  //   {
+  //     { 0, 0 },{ 0 }
+  //   }
+  //   ,
+  //   {
+  //     { 0.1, 0.1 },{ 0 }
+  //   }
+  //   ,
+  //   {
+  //     { 0, 1 },{ 1 }
+  //   }
+  //   ,
+  //   {
+  //     { 0.1, 0.9 },{ 1 }
+  //   }
+  //   ,
+  //   {
+  //     { 1, 0 },{ 1 }
+  //   }
+  //   ,
+  //   {
+  //     { 0.9, 0.1 },{ 1 }
+  //   }
+  //   ,
+  //   {
+  //     { 1, 1 },{ 0 }
+  //   }
+  //   ,
+  //   {
+  //     { 0.9, 0.9 },{ 0 }
+  //   }
+  // };
+
+  patterns = std::vector< My::Perceptron::pattern > {
     {
       { 1, 1 },{ 0 }
     }
     ,
     {
-      { 0.9, 0.9 },{ 0 }
+      { 1, 2 },{ 1 }
+    }
+    ,
+    {
+      { 2, 1 },{ 1 }
+    }
+    ,
+    {
+      { 2, 2 },{ 0 }
     }
   };
+
+  // patterns = std::vector< My::Perceptron::pattern >{
+  //   {
+  //     { -1, -1 },{ 0 }
+  //   }
+  //   ,
+  //   {
+  //     { -1, 1 },{ 1 }
+  //   }
+  //   ,
+  //   {
+  //     { 1, -1 },{ 1 }
+  //   }
+  //   ,
+  //   {
+  //     { 1, 1 },{ 0 }
+  //   }
+  // };
 }
 
 void linear_test(
@@ -69,65 +106,68 @@ void linear_test(
   p = My::Perceptron(2, 1);
   patterns = std::vector< My::Perceptron::pattern > {
     {
-      { 0, 0 }, { 0 }
+      { 1, 1 },{ 0 }
     }
     ,
     {
-      { 1, 0 },{ 1 }
+      { 2, 1 },{ 1 }
     }
   };
 }
 
+void print_weights(const My::Perceptron& p) {
+  auto& weights = *(const std::vector< My::matrix< double > >*)(&p);
+
+  for(const auto& weight : weights) {
+    std::cout << weight.to_string() << std::endl;
+  }
+}
+
 // [[Rcpp::export]]
 Rcpp::RObject test() {
-
   //auto seed = std::time(nullptr) % 1000;
   //std::cout << seed << std::endl;
   //srand(seed);
 
-  //XOR test
   My::Perceptron p;
+
   std::vector< My::Perceptron::pattern > patterns;
 
   XOR_test(p, patterns);
   //linear_test(p, patterns);
 
-  const double eps = 0.01;
+  const double eps = 0.001;
   int epochs = 0;
   double err;
+
+  print_weights(p);
 
   do {
     err = std::pow(p.back_prop(patterns)*2, 0.5);
     epochs++;
-    if (!(epochs%10000)) std::cout << epochs << " : err = " << err << std::endl;
-  } while (err > eps);
+    if (!(epochs%10000) || epochs == 1) std::cout << epochs << " : err = " << err << std::endl;
+  } while (err > eps && epochs < 1000000);
 
-  std::cout << "epochs = " << epochs << std::endl;
+  std::cout << "epochs = " << epochs << std::endl << "err = " << err << std::endl;
 
   //serializing test
   if (false)
   {
     std::stringstream s;
-    (std::ostream&)s & p;
+    s << p;
 
     auto str = s.str();
 
     p = My::Perceptron();
-    (std::istream&)s & p;
+    s >> p;
 
     s = std::stringstream();
-    (std::ostream&)s & p;
+    s << p;
 
     std::cout << "\nserializing test " << (str == s.str() ? "passed" : "failed") << "\n\n";
   }
 
-  {
-    auto& weights = *(std::vector< My::matrix< double > >*)(&p);
-
-    for(const auto& weight : weights) {
-      std::cout << weight.to_string() << std::endl;
-    }
-  }
+  print_weights(p);
 
   for (auto& pattern : patterns) {
     assert(std::abs(p(pattern.input)[0] - pattern.second[0]) <= eps);

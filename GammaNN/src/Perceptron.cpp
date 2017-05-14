@@ -10,6 +10,8 @@
 #define __PRETTY_FUNCTION__ __func__
 #endif
 
+#define LINEAR_OUTS true
+
 namespace My {
 
 	namespace {
@@ -49,6 +51,13 @@ namespace My {
 		VEC_OPERATIONS(operator+, +);
 		VEC_OPERATIONS(operator-, -);
 		VEC_OPERATIONS(operator*, *);
+
+		double operator,(const std::vector< double >& v1, const std::vector< double >& v2) {
+		  if (v1.size() != v2.size()) throw std::invalid_argument("v1 and v2 have different dimensions");
+		  double res = 0;
+		  for (int i = 0; i < v1.size(); i++) { res += v1[i] * v2[i]; }
+		  return res;
+		}
 
 		std::vector< double > operator-(const std::vector< double >& v) {
 			return v * -1;
@@ -125,7 +134,6 @@ namespace My {
 	void Perceptron::copy(const Perceptron& p) {
 		if (this == &p) return;
 		weights = p.weights;
-		//last_is_linear = p.last_is_linear;
 
 		context.reset();
 		if (p.context) {
@@ -136,7 +144,6 @@ namespace My {
 		if (this == &p) return;
 		weights = std::move(p.weights);
 		p.weights.resize(1);
-		//last_is_linear = p.last_is_linear;
 
 		context = std::move(p.context);
 	}
@@ -145,7 +152,6 @@ namespace My {
 		US inputs,
 		US outputs,
 		const std::vector< US >& hidden
-		//,bool linear_outs
 	) throw (std::invalid_argument)
 	{
 		if (!(inputs && outputs)) {
@@ -158,8 +164,6 @@ namespace My {
 			if (!layer_size) throw std::invalid_argument("Perceptron(): layer_size == 0");
 		}
 
-		//this->last_is_linear = linear_outs;
-
 		weights.resize(1 + hidden.size());
 
 		int height = inputs + 1;
@@ -169,16 +173,16 @@ namespace My {
 
 			weights[i] = matrix< double >(width, height);
 
-			//for (auto& weight : weights[i]) {
-			//	weight = (1 - 2*(std::rand()%2)) * (0.1 + (std::rand() % 10000) / 1000.0);
-			//}
+			// for (auto& weight : weights[i]) {
+			// weight = (1 - 2*(std::rand()%2)) * (0.1 + (std::rand() % 10000) / 1000.0);
+			// }
 
 			//for (auto& weight : weights[i]) {
 			//	weight = (1 - 2 * (std::rand() % 2)) * (0.1 + (std::rand() % 1000) / 5000.0);
 			//}
 
 			for (auto& weight : weights[i]) {
-				weight = (0.1 + (std::rand() % 1000) / 5000.0);
+				weight = (0.1 + (std::rand() % 10000) / 20000.0);
 			}
 
 			height = width + 1;
@@ -190,15 +194,18 @@ namespace My {
 	int Perceptron::inputs_count() const { return weights.front().height() - 1; }
 	int Perceptron::outputs_count() const { return weights.back().width(); }
 
+#define BIAS_COEFF 1
+
 	std::vector< double > Perceptron::operator()(std::vector< double > input) const throw (std::invalid_argument) {
 		if (input.size() != inputs_count()) throw std::invalid_argument("input.size() != inputs_count()");
+		bool first = LINEAR_OUTS;
 		for (const auto& weight : weights) {
-			input.push_back(1);
+			input.push_back(BIAS_COEFF);
 			input = use_for_vec(
 				input * weight,
-				//(last_is_linear && &weight == &weights.back()) ? nullptr : sigmoid
-				sigmoid
+				(first) ? nullptr : sigmoid
 			);
+			first = false;
 		}
 		return std::move(input);
 	}
@@ -208,14 +215,16 @@ namespace My {
 		if (!context) context.reset(new flushable);
 		context->outputs.resize(1 + weights.size());
 
-		auto outputs_ptr = context->outputs.data();
+		std::vector< double >* outputs_ptr = context->outputs.data();
+
+		bool first = LINEAR_OUTS;
 		for (const auto& weight : weights) {
-			input.push_back(1);
+			input.push_back(BIAS_COEFF);
 			input = use_for_vec(
 				(*outputs_ptr++ = std::move(input)) * weight,
-				//(last_is_linear && &weight == &weights.back()) ? nullptr : sigmoid
-				sigmoid
+				first ? nullptr : sigmoid
 			);
+			first = false;
 		}
 		*outputs_ptr = input;
 		return std::move(input);
@@ -226,28 +235,26 @@ namespace My {
 		if (!context || context->outputs.size() != (weights.size() + 1)) throw (std::runtime_error("wrong context"));
 
 		context->weights_gradients.resize(weights.size());
-		context->flushed = false;
+		context->errors++;
 
 		auto w_iter = weights.rbegin();
 		auto g_iter = context->weights_gradients.rbegin();
 		auto o_iter = context->outputs.rbegin(), pred_o_iter = std::next(o_iter);
 
-		const double speaad = 1;
-
+		bool first = LINEAR_OUTS;
 		for (; w_iter != weights.rend(); w_iter++, g_iter++, o_iter++, pred_o_iter++) {
 
-			//if (!(last_is_linear && &*w_iter == &weights.back()))
-			e = *o_iter * (1 - *o_iter) * e;
+		  if (g_iter->width() != w_iter->width() || g_iter->height() != w_iter->height()) {
+		    *g_iter = matrix< double >(w_iter->width(), w_iter->height());
+		  }
 
-			if (g_iter->width() != w_iter->width() || g_iter->height() != w_iter->height()) {
-				*g_iter = matrix< double >(w_iter->width(), w_iter->height());
-			}
+			if (!first) e = *o_iter * (1 - *o_iter) * e;
+			first = false;
 
-			*g_iter += speaad * (
+			*g_iter +=
 				matrix< double >(1, pred_o_iter->size(), *pred_o_iter)
 				*
-				matrix< double >(e.size(), 1, e)
-				);
+				matrix< double >(e.size(), 1, e);
 
 			e = *w_iter * e;
 
@@ -264,12 +271,47 @@ namespace My {
 
 	void Perceptron::flush() {
 		if (flushed()) return;
-		context->flushed = true;
+		int errors = context->errors;
+		context->errors = 0;
 		if (!context->weights_gradients.size()) return;
+
+		auto static add_rand = [](matrix< double >& derives) {
+		  const static int rand_mod = 10000;
+		  const static double rand_coeff = 0.1;
+
+		  for (auto& value : derives) {
+		    value += (
+                 (
+                    (std::rand() % rand_mod)/double(rand_mod) - 0.5
+                 ) * rand_coeff
+		    );
+		  }
+		};
+
+		auto static add_regularization = [](const matrix< double >& weight, matrix< double >& derives) {
+		  const static double regularization_param = 0.0001;
+
+		  for (int i = 0; i < (weight.height() - 1); i++) {
+		    for (int j = 0; j < weight.width(); j++) {
+		      derives(i, j) += weight(i, j) * regularization_param;
+		    }
+		  }
+		};
+
+		const double speed = 1;
 
 		auto iter = context->weights_gradients.begin();
 		for (auto& weight : weights) {
-			weight += *iter;
+		  matrix< double > derives = *iter * (1.0 / errors);
+
+		  add_regularization(weight, derives);
+
+		  add_rand(derives);
+
+		  if (matrix<double>::std_abs(derives) > 1000) printf("%s\n", derives.to_string().c_str());
+
+			weight -= speed * (derives);
+
 		  for (auto& value : *iter) {
 		    value = 0;
 		  }
@@ -287,10 +329,8 @@ namespace My {
 		double global_error = 0;
 
 		for (const auto& p : patterns) {
-			errors e = p.output - forward_prop(p.input);
-			for (const auto& error : e) {
-				global_error += error * error;
-			}
+			errors e = forward_prop(p.input) - p.output;
+		  global_error += (e, e);
 			put_errors(e, false);
 		}
 
@@ -305,7 +345,7 @@ namespace My {
 		os & weights & /*last_is_linear & */there_is_context;
 
 		if (there_is_context) {
-			os & context->weights_gradients & context->outputs & context->flushed;
+			os & context->weights_gradients & context->outputs & context->errors;
 		}
 	}
 	Perceptron Perceptron::from_stream(std::istream& is) {
@@ -316,18 +356,18 @@ namespace My {
 
 		if (there_is_context) {
 			p.context.reset(new flushable);
-			is & p.context->weights_gradients & p.context->outputs & p.context->flushed;
+			is & p.context->weights_gradients & p.context->outputs & p.context->errors;
 		}
 		return std::move(p);
 	}
 }
 
-std::ostream& operator & (std::ostream& os, const My::Perceptron& p) {
+std::ostream& operator << (std::ostream& os, const My::Perceptron& p) {
 	p.write_to_stream(os);
 	return os;
 }
 
-std::istream& operator & (std::istream& is, My::Perceptron& p) {
+std::istream& operator >> (std::istream& is, My::Perceptron& p) {
 	p = std::move(My::Perceptron::from_stream(is));
 	return is;
 }
