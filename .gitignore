@@ -313,4 +313,6 @@ GammaNN/include/*
 *.filters
 *.o
 *.so
+GammaNN/src/*.o
+GammaNN/src/*.so
 GammaNN_0.1.0.tar.gz

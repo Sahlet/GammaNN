@@ -11,6 +11,9 @@
 #endif
 
 #define LINEAR_OUTS true
+#define BACK_PROP_WITH_REGULARIZATION false
+#define BACK_PROP_WITH_RANDOM true
+#define DEBUG_MODE true
 
 namespace My {
 
@@ -198,14 +201,12 @@ namespace My {
 
 	std::vector< double > Perceptron::operator()(std::vector< double > input) const throw (std::invalid_argument) {
 		if (input.size() != inputs_count()) throw std::invalid_argument("input.size() != inputs_count()");
-		bool first = LINEAR_OUTS;
 		for (const auto& weight : weights) {
 			input.push_back(BIAS_COEFF);
 			input = use_for_vec(
 				input * weight,
-				(first) ? nullptr : sigmoid
+				(LINEAR_OUTS && (&weight == &weights.back())) ? nullptr : sigmoid
 			);
-			first = false;
 		}
 		return std::move(input);
 	}
@@ -217,14 +218,12 @@ namespace My {
 
 		std::vector< double >* outputs_ptr = context->outputs.data();
 
-		bool first = LINEAR_OUTS;
 		for (const auto& weight : weights) {
 			input.push_back(BIAS_COEFF);
 			input = use_for_vec(
 				(*outputs_ptr++ = std::move(input)) * weight,
-				first ? nullptr : sigmoid
+				(LINEAR_OUTS && (&weight == &weights.back())) ? nullptr : sigmoid
 			);
-			first = false;
 		}
 		*outputs_ptr = input;
 		return std::move(input);
@@ -241,15 +240,15 @@ namespace My {
 		auto g_iter = context->weights_gradients.rbegin();
 		auto o_iter = context->outputs.rbegin(), pred_o_iter = std::next(o_iter);
 
-		bool first = LINEAR_OUTS;
 		for (; w_iter != weights.rend(); w_iter++, g_iter++, o_iter++, pred_o_iter++) {
 
 		  if (g_iter->width() != w_iter->width() || g_iter->height() != w_iter->height()) {
 		    *g_iter = matrix< double >(w_iter->width(), w_iter->height());
 		  }
 
-			if (!first) e = *o_iter * (1 - *o_iter) * e;
-			first = false;
+			if (!(LINEAR_OUTS && (&*w_iter == &weights.back()))) {
+			  e = *o_iter * (1 - *o_iter) * e;
+			}
 
 			*g_iter +=
 				matrix< double >(1, pred_o_iter->size(), *pred_o_iter)
@@ -277,7 +276,7 @@ namespace My {
 
 		auto static add_rand = [](matrix< double >& derives) {
 		  const static int rand_mod = 10000;
-		  const static double rand_coeff = 0.1;
+		  const static double rand_coeff = 0.01;
 
 		  for (auto& value : derives) {
 		    value += (
@@ -289,7 +288,7 @@ namespace My {
 		};
 
 		auto static add_regularization = [](const matrix< double >& weight, matrix< double >& derives) {
-		  const static double regularization_param = 0.0001;
+		  const static double regularization_param = 0.00001;
 
 		  for (int i = 0; i < (weight.height() - 1); i++) {
 		    for (int j = 0; j < weight.width(); j++) {
@@ -302,19 +301,30 @@ namespace My {
 
 		auto iter = context->weights_gradients.begin();
 		for (auto& weight : weights) {
-		  matrix< double > derives = *iter * (1.0 / errors);
+		  matrix< double >& derives = *iter;
+		  derives *= (1.0 / errors);
 
+#if BACK_PROP_WITH_REGULARIZATION
 		  add_regularization(weight, derives);
-
+#endif
+#if BACK_PROP_WITH_RANDOM
 		  add_rand(derives);
-
-		  if (matrix<double>::std_abs(derives) > 1000) printf("%s\n", derives.to_string().c_str());
+#endif
 
 			weight -= speed * (derives);
 
-		  for (auto& value : *iter) {
-		    value = 0;
+		  for (auto& derive : derives) {
+		    derive = 0;
 		  }
+
+#if DEBUG_MODE
+		  for (auto& w : weight) {
+		    if (std::abs(w) > 1000) {
+		      printf("WARNING in Perceptron.cpp: std::abs(weight) > 1000 (need regularization)");
+		    }
+		  }
+#endif
+
 		  iter++;
 		}
 	}
@@ -342,7 +352,7 @@ namespace My {
 	void Perceptron::write_to_stream(std::ostream& os) const {
 		bool there_is_context = (bool)context;
 
-		os & weights & /*last_is_linear & */there_is_context;
+		os & weights & there_is_context;
 
 		if (there_is_context) {
 			os & context->weights_gradients & context->outputs & context->errors;
@@ -352,7 +362,7 @@ namespace My {
 		Perceptron p;
 		bool there_is_context;
 
-		is & p.weights & /*p.last_is_linear & */there_is_context;
+		is & p.weights & there_is_context;
 
 		if (there_is_context) {
 			p.context.reset(new flushable);
