@@ -234,7 +234,7 @@ namespace My {
 		if (!context || context->outputs.size() != (weights.size() + 1)) throw (std::runtime_error("wrong context"));
 
 		context->weights_gradients.resize(weights.size());
-		context->errors++;
+		context->last_batch_size++;
 
 		auto w_iter = weights.rbegin();
 		auto g_iter = context->weights_gradients.rbegin();
@@ -270,9 +270,10 @@ namespace My {
 
 	void Perceptron::flush() {
 		if (flushed()) return;
-		int errors = context->errors;
-		context->errors = 0;
+		int last_batch_size = context->last_batch_size;
+		context->last_batch_size = 0;
 		if (!context->weights_gradients.size()) return;
+		context->weights_gradients_accumulator.resize(context->weights_gradients.size());
 
 		auto static add_rand = [](matrix< double >& derives) {
 		  const static int rand_mod = 10000;
@@ -288,7 +289,7 @@ namespace My {
 		};
 
 		auto static add_regularization = [](const matrix< double >& weight, matrix< double >& derives) {
-		  const static double regularization_param = 0.00001;
+		  const static double regularization_param = 0.001;
 
 		  for (int i = 0; i < (weight.height() - 1); i++) {
 		    for (int j = 0; j < weight.width(); j++) {
@@ -298,34 +299,42 @@ namespace My {
 		};
 
 		const double speed = 1;
+		const double accumulation = 0.2;
 
 		auto iter = context->weights_gradients.begin();
+		auto accumulator_iter = context->weights_gradients_accumulator.begin();
 		for (auto& weight : weights) {
-		  matrix< double >& derives = *iter;
-		  derives *= (1.0 / errors);
 
 #if BACK_PROP_WITH_REGULARIZATION
-		  add_regularization(weight, derives);
+		  add_regularization(weight, *iter);
 #endif
+
 #if BACK_PROP_WITH_RANDOM
-		  add_rand(derives);
+		  add_rand(*iter);
 #endif
+		  (*iter) *= (1.0 / last_batch_size);
 
-			weight -= speed * (derives);
-
-		  for (auto& derive : derives) {
-		    derive = 0;
+		  if (accumulator_iter->dimension() == iter->dimension()) {
+		    *accumulator_iter *= accumulation;
+		    *accumulator_iter += (1 - accumulation) * (*iter);
+		  } else {
+		    *accumulator_iter = *iter;
 		  }
+
+		  matrix< double >& derives = *accumulator_iter;
+		  weight -= speed * derives;
 
 #if DEBUG_MODE
 		  for (auto& w : weight) {
-		    if (std::abs(w) > 1000) {
-		      printf("WARNING in Perceptron.cpp: std::abs(weight) > 1000 (need regularization)");
+		    if (std::abs(w) > 100000) {
+		      printf("WARNING in Perceptron.cpp: std::abs(weight) > 100000\n");
 		    }
 		  }
 #endif
 
+		  *iter = 0;
 		  iter++;
+		  accumulator_iter++;
 		}
 	}
 
@@ -355,7 +364,7 @@ namespace My {
 		os & weights & there_is_context;
 
 		if (there_is_context) {
-			os & context->weights_gradients & context->outputs & context->errors;
+			os & context->weights_gradients & context->outputs & context->last_batch_size;
 		}
 	}
 	Perceptron Perceptron::from_stream(std::istream& is) {
@@ -366,7 +375,7 @@ namespace My {
 
 		if (there_is_context) {
 			p.context.reset(new flushable);
-			is & p.context->weights_gradients & p.context->outputs & p.context->errors;
+			is & p.context->weights_gradients & p.context->outputs & p.context->last_batch_size;
 		}
 		return std::move(p);
 	}
