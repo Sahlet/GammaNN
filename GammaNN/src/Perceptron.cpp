@@ -4,7 +4,6 @@
 #include <My/Perceptron.h>
 #include <istream>
 #include <ostream>
-#include <type_traits>
 
 #ifndef __PRETTY_FUNCTION__
 #define __PRETTY_FUNCTION__ __func__
@@ -13,6 +12,8 @@
 #define LINEAR_OUTS true
 #define BACK_PROP_WITH_REGULARIZATION false
 #define BACK_PROP_WITH_RANDOM true
+#define BACK_PROP_WITH_ADAPTIVE_LEARNING_RATE true
+#define BACK_PROP_WITH_GRADIENTS_ACCUMULATION_COEFF 0.2
 #define DEBUG_MODE true
 
 namespace My {
@@ -32,104 +33,6 @@ namespace My {
 				x = f(x);
 			}
 			return std::move(X);
-		}
-#define VEC_OPERATIONS(NAME, OPERATOR)\
-		std::vector< double > NAME(const std::vector< double >& v1, const std::vector< double >& v2) {\
-			if (v1.size() != v2.size()) throw std::invalid_argument("v1 and v2 have different dimensions");\
-			std::vector< double > res(v1.size());\
-			for (int i = 0; i < v1.size(); i++) { res[i] = v1[i] OPERATOR v2[i]; }\
-			return std::move(res);\
-		}\
-		std::vector< double > NAME(const std::vector< double >& v1, const double& v2) {\
-			std::vector< double > res(v1.size());\
-			for (int i = 0; i < v1.size(); i++) { res[i] = v1[i] OPERATOR v2; }\
-			return std::move(res);\
-		}\
-		std::vector< double > NAME(const double& v1, const std::vector< double >& v2) {\
-			std::vector< double > res(v2.size());\
-			for (int i = 0; i < v2.size(); i++) { res[i] = v1 OPERATOR v2[i]; }\
-			return std::move(res);\
-		}
-
-		VEC_OPERATIONS(operator+, +);
-		VEC_OPERATIONS(operator-, -);
-		VEC_OPERATIONS(operator*, *);
-
-		double operator,(const std::vector< double >& v1, const std::vector< double >& v2) {
-		  if (v1.size() != v2.size()) throw std::invalid_argument("v1 and v2 have different dimensions");
-		  double res = 0;
-		  for (int i = 0; i < v1.size(); i++) { res += v1[i] * v2[i]; }
-		  return res;
-		}
-
-		std::vector< double > operator-(const std::vector< double >& v) {
-			return v * -1;
-		}
-
-		//-----------------------------------------------------------------------
-		//SERIALIZE
-		template< class T >
-		typename std::enable_if<std::is_fundamental<T>::value || std::is_enum<T>::value, std::ostream& >::type
-			operator&(std::ostream& os, const T& v) {
-			os.write((const char*)&v, sizeof(T));
-			return os;
-		}
-		template< class T >
-		typename std::enable_if<std::is_fundamental<T>::value || std::is_enum<T>::value, std::istream& >::type
-			operator&(std::istream& is, T& v) {
-			is.read((char*)&v, sizeof(T));
-			return is;
-		}
-		template< class T >
-		typename std::enable_if<std::is_compound<T>::value && !std::is_enum<T>::value, std::ostream& >::type
-			operator&(std::ostream& os, const T& obj);
-		template< class T >
-		typename std::enable_if<std::is_compound<T>::value && !std::is_enum<T>::value, std::istream& >::type
-			operator&(std::istream& is, T& obj);
-
-		//-----------------------------------------------------------------------
-		//VECTOR SERIALIZE
-		template< class T >
-		void serialize(std::ostream& os, const std::vector< T >& v) {
-			os & v.size();
-			for (auto& obj : v) { os & obj; }
-		}
-		template< class T >
-		void serialize(std::istream& is, std::vector< T >& v) {
-			typename std::vector< T >::size_type size;
-			is & size;
-			v.resize(size);
-			for (auto& obj : v) { is & obj; }
-		}
-
-		//-----------------------------------------------------------------------
-		//MATRIX SERIALIZE
-		template< class T >
-		void serialize(std::ostream& os, const matrix< T >& m) {
-			os & m.width() & m.height();
-			for (auto& obj : m) { os & obj; }
-		}
-		template< class T >
-		void serialize(std::istream& is, matrix< T >& m) {
-			US w, h;
-			is & w & h;
-			m = matrix< T >(w, h);
-			for (auto& obj : m) { is & obj; }
-		}
-
-		//-----------------------------------------------------------------------
-		//SERIALIZE
-		template< class T >
-		typename std::enable_if<std::is_compound<T>::value && !std::is_enum<T>::value, std::ostream& >::type
-		  operator&(std::ostream& os, const T& obj) {
-		    serialize(os, obj);
-		    return os;
-		}
-		template< class T >
-		typename std::enable_if<std::is_compound<T>::value && !std::is_enum<T>::value, std::istream& >::type
-		  operator&(std::istream& is, T& obj) {
-		    serialize(is, obj);
-		    return is;
 		}
 
 	}
@@ -235,6 +138,7 @@ namespace My {
 
 		context->weights_gradients.resize(weights.size());
 		context->last_batch_size++;
+		context->cur_global_error += (e, e);
 
 		auto w_iter = weights.rbegin();
 		auto g_iter = context->weights_gradients.rbegin();
@@ -250,10 +154,11 @@ namespace My {
 			  e = *o_iter * (1 - *o_iter) * e;
 			}
 
-			*g_iter +=
-				matrix< double >(1, pred_o_iter->size(), *pred_o_iter)
-				*
-				matrix< double >(e.size(), 1, e);
+			*g_iter += (
+  				matrix< double >(1, pred_o_iter->size(), *pred_o_iter)
+  				*
+  				matrix< double >(e.size(), 1, e)
+			  );
 
 			e = *w_iter * e;
 
@@ -274,6 +179,26 @@ namespace My {
 		context->last_batch_size = 0;
 		if (!context->weights_gradients.size()) return;
 		context->weights_gradients_accumulator.resize(context->weights_gradients.size());
+
+#if BACK_PROP_WITH_ADAPTIVE_LEARNING_RATE
+		{
+		  //http://mechanoid.kiev.ua/neural-net-backprop2.html
+		  //from "4. gradient descent method"
+
+		  double error_delta = context->cur_global_error - 1.01*context->prev_global_error;
+		  context->speed *= (error_delta > 0) ? 0.99 : 1.01;
+		  context->speed = std::max(context->speed, 0.01);
+		  context->speed = std::min(context->speed, 1.0);
+
+		  // {
+		  //   static int counter = 0;
+		  //   if (!(counter%1000)) printf("speed = %f\n", context->speed);
+		  //   counter++;
+		  // }
+		}
+#endif
+		context->prev_global_error = context->cur_global_error;
+		context->cur_global_error = 0;
 
 		auto static add_rand = [](matrix< double >& derives) {
 		  const static int rand_mod = 10000;
@@ -298,8 +223,7 @@ namespace My {
 		  }
 		};
 
-		const double speed = 1;
-		const double accumulation = 0.2;
+		const double accumulation = BACK_PROP_WITH_GRADIENTS_ACCUMULATION_COEFF;
 
 		auto iter = context->weights_gradients.begin();
 		auto accumulator_iter = context->weights_gradients_accumulator.begin();
@@ -322,7 +246,7 @@ namespace My {
 		  }
 
 		  matrix< double >& derives = *accumulator_iter;
-		  weight -= speed * derives;
+		  weight -= context->speed * derives;
 
 #if DEBUG_MODE
 		  for (auto& w : weight) {
@@ -345,17 +269,14 @@ namespace My {
 				throw std::invalid_argument("some of patterns has wrong size");
 		}
 
-		double global_error = 0;
-
 		for (const auto& p : patterns) {
 			errors e = forward_prop(p.input) - p.output;
-		  global_error += (e, e);
 			put_errors(e, false);
 		}
 
 		flush();
 
-		return global_error / 2;
+		return context->prev_global_error / 2;
 	}
 
 	void Perceptron::write_to_stream(std::ostream& os) const {
@@ -364,7 +285,14 @@ namespace My {
 		os & weights & there_is_context;
 
 		if (there_is_context) {
-			os & context->weights_gradients & context->outputs & context->last_batch_size;
+			os
+		    & context->weights_gradients
+		    & context->weights_gradients_accumulator
+		    & context->outputs
+		    & context->last_batch_size
+		    & context->speed
+		    & context->prev_global_error
+		    & context->cur_global_error;
 		}
 	}
 	Perceptron Perceptron::from_stream(std::istream& is) {
@@ -375,7 +303,14 @@ namespace My {
 
 		if (there_is_context) {
 			p.context.reset(new flushable);
-			is & p.context->weights_gradients & p.context->outputs & p.context->last_batch_size;
+			is
+			  & p.context->weights_gradients
+			  & p.context->weights_gradients_accumulator
+			  & p.context->outputs
+			  & p.context->last_batch_size
+			  & p.context->speed
+			  & p.context->prev_global_error
+			  & p.context->cur_global_error;
 		}
 		return std::move(p);
 	}
