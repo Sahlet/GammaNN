@@ -5,9 +5,11 @@ namespace My {
 typedef unsigned int UI;
 
   class Series {
-    My::matrix< double > src_data;
+    const My::matrix< double > src_data;
     std::vector< GammaNN::object > gen_data;
   public:
+
+    Series(My::matrix< double > src_data) : src_data(std::move(src_data)) {}
 
     US get_object_dimention() {
       return src_data.width();
@@ -59,7 +61,7 @@ typedef unsigned int UI;
     //for prediction
     //------------------------------------
     void clear_result() {
-      set_value(result_number, 0);
+      result_number = 0;
       set_value(result, 0);
     }
     void next() {
@@ -75,13 +77,13 @@ typedef unsigned int UI;
     void clear_learning() {
       clear_result();
       set_value(result_by_derivative, 0);
-      result_by_derivative.clear()
+      result_by_derivative.clear();
     }
     void random_weight_init();
     GammaNN::object operator[](const UI index) {
       clear_learning();
 
-      object one_minus_weight = (1 - weight);
+      GammaNN::object one_minus_weight = (1 - weight);
 
       result += series[0];
       for (result_number = 1; result_number <= index; result_number++) {
@@ -99,7 +101,7 @@ typedef unsigned int UI;
       }
       result_by_derivative = result - weight * result_by_derivative;
 
-      return weight * res;
+      return weight * result;
     }
     GammaUnit::errors put_errors(Perceptron::errors e) throw (std::invalid_argument) {
       if (e.size() != series.get_object_dimention())
@@ -123,8 +125,10 @@ typedef unsigned int UI;
   struct GammaNN_members {
     Series series;
 
-    std::vector< unit > units;
+    std::vector< GammaUnit > units;
     My::Perceptron p;
+
+    GammaNN_members(My::matrix< double > src_data) : series(std::move(src_data)) {}
   };
 
   US GammaNN::get_object_dimention() {
@@ -143,10 +147,14 @@ typedef unsigned int UI;
     if (data.width() < 1 || data.height() < 1)
       throw std::invalid_argument("GammaNN(): invalid data dimention");
 
-    members.reset(new GammaNN_members);
-    members->src_data = std::move(data);
+    members.reset(new GammaNN_members(std::move(data)));
 
-    members->units = std::vector< unit >(units);
+    if (units) {
+      members->units.reserve(units);
+      for (US i = 0; i < units; i++) {
+        members->units.emplace_back(members->series);
+      }
+    }
 
     members->p = My::Perceptron(get_object_dimention() * (get_units_number() + 1), get_object_dimention(), hidden);
 
