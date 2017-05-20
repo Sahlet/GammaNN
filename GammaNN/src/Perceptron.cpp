@@ -279,20 +279,23 @@ namespace My {
 		return context->prev_global_error / 2;
 	}
 
+#define SERIALIZE_CONTEXT(STREAM, CONTEXT)                       \
+	STREAM                                                         \
+	  & CONTEXT->weights_gradients                                 \
+	  & CONTEXT->weights_gradients_accumulator                     \
+	  & CONTEXT->outputs                                           \
+	  & CONTEXT->last_batch_size                                   \
+	  & CONTEXT->speed                                             \
+	  & CONTEXT->prev_global_error                                 \
+	  & CONTEXT->cur_global_error
+
 	void Perceptron::write_to_stream(std::ostream& os) const {
 		bool there_is_context = (bool)context;
 
 		os & weights & there_is_context;
 
 		if (there_is_context) {
-			os
-		    & context->weights_gradients
-		    & context->weights_gradients_accumulator
-		    & context->outputs
-		    & context->last_batch_size
-		    & context->speed
-		    & context->prev_global_error
-		    & context->cur_global_error;
+		  SERIALIZE_CONTEXT(os, context);
 		}
 	}
 	Perceptron Perceptron::from_stream(std::istream& is) {
@@ -303,27 +306,11 @@ namespace My {
 
 		if (there_is_context) {
 			p.context.reset(new flushable);
-			is
-			  & p.context->weights_gradients
-			  & p.context->weights_gradients_accumulator
-			  & p.context->outputs
-			  & p.context->last_batch_size
-			  & p.context->speed
-			  & p.context->prev_global_error
-			  & p.context->cur_global_error;
+
+		  SERIALIZE_CONTEXT(is, p.context);
 		}
 		return std::move(p);
 	}
-}
-
-std::ostream& operator << (std::ostream& os, const My::Perceptron& p) {
-	p.write_to_stream(os);
-	return os;
-}
-
-std::istream& operator >> (std::istream& is, My::Perceptron& p) {
-	p = std::move(My::Perceptron::from_stream(is));
-	return is;
 }
 
 #endif
