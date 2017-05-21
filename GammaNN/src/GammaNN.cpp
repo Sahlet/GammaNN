@@ -1,30 +1,37 @@
+//GammaNN.cpp
+
+#ifndef __GAMMANN_CPP__
+#define __GAMMANN_CPP__
+
 #include <My/GammaNN.h>
+
+#define MIN_WEIGHT 0.01
+#define MAX_WEIGHT 1.99
 
 namespace My {
 
-typedef unsigned int UI;
-
   class Series {
+    friend class GammaNN;
     const My::matrix< double > src_data;
     std::vector< GammaNN::object > gen_data;
   public:
 
-    Series(My::matrix< double > src_data) : src_data(std::move(src_data)) {}
+    Series(My::matrix< double > src_data = My::matrix< double >()) : src_data(std::move(src_data)) {}
 
     US get_object_dimention() {
       return src_data.width();
     }
 
-    inline UI series_size() {
+    inline UI size() {
       return src_data.height() + gen_data.size();
     }
 
     GammaNN::object operator[](int index) throw (std::out_of_range) {
-      if (index >= series_size()) throw std::out_of_range("Series: out_of_range");
+      if (index >= size()) throw std::out_of_range("Series: out_of_range");
 
       if (index < src_data.height()) {
         auto iter = src_data.begin() + (index * src_data.width());
-        return GammaNN::object(iter, iter + (src_data.width() - 1));
+        return GammaNN::object(iter, iter + src_data.width());
       }
 
       return gen_data[index - src_data.height()];
@@ -32,13 +39,26 @@ typedef unsigned int UI;
   };
 
   class GammaUnit {
-    Series& series;
+    friend inline std::ostream& operator & (std::ostream& os, const My::GammaUnit& g);
+    friend inline std::istream& operator & (std::istream& is, My::GammaUnit& g);
     GammaNN::object weight;
     GammaNN::object weight_delta;
     GammaNN::object result;
     GammaNN::object result_by_derivative;
     UI result_number = 0;
+
+
+    //::operator& (STREAM, GUNIT.weight)
+#define SERIALIZE_GammaUnit(STREAM, GUNIT)\
+          STREAM                          \
+          & GUNIT.weight                  \
+          & GUNIT.weight_delta            \
+          & GUNIT.result                  \
+          & GUNIT.result_by_derivative    \
+          & GUNIT.result_number
+
   public:
+    Series* series_ptr = nullptr;
 
     //            impulse response for Gamma memory "g(i, weight) = weight*((1 - weight)^(i - 1))" weight є ((0; 2) \ {1})
     //derivative  impulse response for Gamma memory "g'(i, weight) = (1 - i*weight)*((1 - weight)^(i - 2))" weight є ((0; 2) \ {1})
@@ -49,9 +69,12 @@ typedef unsigned int UI;
       clear_learning();
       set_value(weight, 0);
     }
-    GammaUnit(Series& series) : series(series) {
+
+    GammaUnit() {}
+    GammaUnit(Series& series) : series_ptr(&series) {
       weight.resize(series.get_object_dimention());
       result.resize(series.get_object_dimention());
+      random_weight_init();
     }
     GammaNN::object get() {
       return weight * result;
@@ -66,7 +89,7 @@ typedef unsigned int UI;
     }
     void next() {
       if (result_number) result *= (1 - weight);
-      result += series[result_number];
+      result += (*series_ptr)[result_number];
       result_number++;
     }
 
@@ -78,24 +101,29 @@ typedef unsigned int UI;
       clear_result();
       set_value(result_by_derivative, 0);
       result_by_derivative.clear();
+      weight_delta.clear();
     }
-    void random_weight_init();
+    void random_weight_init() {
+      for (auto& w : weight) {
+        w = (MIN_WEIGHT + ((std::rand() % 10000) / 10000.0) * (MAX_WEIGHT - MIN_WEIGHT));
+      }
+    }
     GammaNN::object operator[](const UI index) {
       clear_learning();
 
       GammaNN::object one_minus_weight = (1 - weight);
 
-      result += series[0];
+      result += (*series_ptr)[0];
       for (result_number = 1; result_number <= index; result_number++) {
         result *= one_minus_weight;
-        result += series[result_number];
+        result += (*series_ptr)[result_number];
       }
 
-      result_by_derivative.resize(series.get_object_dimention());
+      result_by_derivative.resize((*series_ptr).get_object_dimention());
       if (index) {
-        result_by_derivative += series[index - 1];
+        result_by_derivative += (*series_ptr)[index - 1];
         for (UI i = 2; i <= index; i++) {
-          result_by_derivative += i * (series[index - i] * one_minus_weight);
+          result_by_derivative += i * ((*series_ptr)[index - i] * one_minus_weight);
           if (i < index) one_minus_weight *= one_minus_weight;
         }
       }
@@ -104,50 +132,79 @@ typedef unsigned int UI;
       return weight * result;
     }
     GammaUnit::errors put_errors(Perceptron::errors e) throw (std::invalid_argument) {
-      if (e.size() != series.get_object_dimention())
+      if (e.size() != (*series_ptr).get_object_dimention())
         throw std::invalid_argument("GammaUnit(): invalid errors dimention");
 
-      weight_delta.resize(series.get_object_dimention());
+      weight_delta.resize((*series_ptr).get_object_dimention());
+
       e *= result_by_derivative;
-      const double speed = 1;
-      weight_delta += speed * e;
+
+      weight_delta += e;
 
       return std::move(e);
     }
 
     void flush() {
-      weight -= weight_delta;
-      weight_delta.clear();
+      const double speed = 1;
+      weight -= speed * weight_delta;
+      weight = clamp(weight, MIN_WEIGHT, MAX_WEIGHT);
+      set_value(weight_delta, 0);
     }
 
   };
 
+  inline std::ostream& operator & (std::ostream& os, const My::GammaUnit& g) {
+    //SERIALIZE_GammaUnit(os, g);
+    return os;
+  }
+  inline std::istream& operator & (std::istream& is, My::GammaUnit& g) {
+    //SERIALIZE_GammaUnit(is, g);
+    return is;
+  }
+
   struct GammaNN_members {
     Series series;
-
     std::vector< GammaUnit > units;
+    const UI trace_size;
     My::Perceptron p;
 
-    GammaNN_members(My::matrix< double > src_data) : series(std::move(src_data)) {}
+    GammaNN_members(My::matrix< double > src_data, const UI trace_size) : series(std::move(src_data)), trace_size(trace_size) {}
   };
+
+  void GammaNN_members_deleter::operator()(GammaNN_members* ptr) {
+    delete ptr;
+  }
 
   US GammaNN::get_object_dimention() {
     return members->series.get_object_dimention();
   }
-
   US GammaNN::get_units_number() {
     return members->units.size();
   }
+  US GammaNN::get_trace_size() {
+    return members->trace_size;
+  }
+  US GammaNN::get_series_size() {
+    return members->series.size();
+  }
+  US GammaNN::get_src_series_size() {
+    return members->series.src_data.height();
+  }
+
 
   GammaNN::GammaNN(
     My::matrix< double > data,
     const std::vector< US >& hidden,
-    US units
+    US units,
+    US trace_size
   ) throw (std::invalid_argument) {
-    if (data.width() < 1 || data.height() < 1)
+    if ((trace_size + units) == 0)
+      throw std::invalid_argument("GammaNN(): (trace_size + units) == 0 -- perceptron can't see anything");
+
+    if (data.width() < 1 || data.height() < trace_size)
       throw std::invalid_argument("GammaNN(): invalid data dimention");
 
-    members.reset(new GammaNN_members(std::move(data)));
+    members.reset(new GammaNN_members(std::move(data), trace_size));
 
     if (units) {
       members->units.reserve(units);
@@ -158,10 +215,111 @@ typedef unsigned int UI;
 
     members->p = My::Perceptron(get_object_dimention() * (get_units_number() + 1), get_object_dimention(), hidden);
 
-    //learning
   }
 
-  GammaNN::object GammaNN::operator[](int index) {
-    GammaNN::object res;
+  double GammaNN::learn(const std::vector< UI >& patterns) throw (std::range_error) {
+    if (!patterns.size()) return 0;
+
+    UI series_size = members->series.size();
+    for (auto& pattern : patterns) {
+      if (pattern >= series_size || pattern < get_trace_size())
+        throw std::range_error("pattern >= series_size ||  || pattern < trace_size");
+    }
+
+    double global_error = 0;
+
+    My::matrix< double > input(get_object_dimention(), get_units_number() + get_trace_size());
+    for (auto& pattern : patterns) {
+      for (UI j = 0; j < get_units_number(); j++) {
+        input[j] = members->units[j][pattern - 1];
+      }
+      for (UI j = get_units_number(), obj_number = 1; j < input.height(); j++, obj_number++) {
+        input[j] = members->series[pattern - obj_number];
+      }
+
+      auto e = members->p.forward_prop(input.get_vec()) - members->series[pattern];
+      global_error += (e, e);
+      e = members->p.put_errors(std::move(e), false);
+
+      My::matrix< double > errors (
+        input.width(), input.height(),
+        std::move(e)
+      );
+
+      for (UI j = 0; j < get_units_number(); j++) {
+        members->units[j].put_errors(errors[j]);
+      }
+    }
+
+    members->p.flush();
+    for(auto& unit : members->units) {
+      unit.flush();
+    }
+
+    return global_error / 2;
+  }
+
+  GammaNN::object GammaNN::operator[](UI index) {
+    {
+      UI i = get_series_size();
+      if (i <= index) {
+        members->series.gen_data.reserve(members->series.gen_data.size() + (index - i) + 1);
+
+        My::matrix< double > input(get_object_dimention(), get_units_number() + get_trace_size());
+        for (; i <= index; i++) {
+          for (UI j = 0; j < get_units_number(); j++) {
+            input[j] = members->units[j][i - 1];
+          }
+          for (UI j = get_units_number(), obj_number = 1; j < input.height(); j++, obj_number++) {
+            input[j] = members->series[i - obj_number];
+          }
+
+          members->series.gen_data.emplace_back(members->p(input.get_vec()));
+
+          std::for_each(members->units.begin(), members->units.end(), [](GammaUnit& unit) { unit.next(); } );
+        }
+      }
+    }
+
+    return members->series[index];
+  }
+
+  GammaNN::GammaNN(const GammaNN& nn) {
+    (*this) = nn;
+  }
+  GammaNN::GammaNN(GammaNN&& nn) {
+    (*this) = std::move(nn);
+  }
+  GammaNN& GammaNN::operator=(const GammaNN& nn) {
+    members.reset(new GammaNN_members(*nn.members));
+    return *this;
+  }
+  GammaNN& GammaNN::operator=(GammaNN&& nn) {
+    GammaNN tmp;
+    members = std::move(nn.members);
+    nn.members = std::move(tmp.members);
+    return *this;
+  }
+
+#define SERIALIZE_MEMBERS(STREAM, MEMBERS)                       \
+  STREAM                                                         \
+    & const_cast<My::matrix< double >&>(MEMBERS->series.src_data)\
+    & MEMBERS->series.gen_data                                   \
+    & MEMBERS->units                                             \
+    & MEMBERS->trace_size                                        \
+    & MEMBERS->p
+
+  void GammaNN::write_to_stream(std::ostream& os) const {
+    SERIALIZE_MEMBERS(os, members);
+  }
+  GammaNN GammaNN::from_stream(std::istream& is) {
+    GammaNN nn;
+    SERIALIZE_MEMBERS(is, nn.members);
+    for (auto& unit : nn.members->units) {
+      unit.series_ptr = &nn.members->series;
+    }
+    return std::move(nn);
   }
 }
+
+#endif

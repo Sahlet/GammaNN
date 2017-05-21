@@ -1,9 +1,9 @@
+//Perceptron.cpp
+
 #ifndef __PERCEPTRON_CPP__
 #define __PERCEPTRON_CPP__
 
 #include <My/Perceptron.h>
-#include <istream>
-#include <ostream>
 
 #ifndef __PRETTY_FUNCTION__
 #define __PRETTY_FUNCTION__ __func__

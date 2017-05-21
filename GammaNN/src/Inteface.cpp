@@ -2,6 +2,7 @@
 
 #include <Rcpp.h>
 #include <My/Perceptron.h>
+#include <My/GammaNN.h>
 #include <assert.h>
 #include <fstream>
 #include <iostream>
@@ -22,6 +23,7 @@ Rcpp::List rcpp_hello() {
   return z;
 }
 
+namespace {
 void XOR_test(
     My::Perceptron& p,
     std::vector< My::Perceptron::pattern >& patterns
@@ -176,9 +178,74 @@ void perceptron_test() {
 
   std::cout << std::flush;
 }
+}
+
+namespace {
+My::matrix< double > get_series_of_one() {
+  std::vector< double > vec(100, 1);
+  return My::matrix< double >(1, vec.size(), std::move(vec));
+}
+
+void GammaNN_test(const My::matrix< double >& series) {
+
+  if (series.width() < 1 || series.height() < 2) throw std::invalid_argument("series.width() < 1 || series.height() < 2");
+
+  auto src_data = sub_matrix(series, {0, 0}, series.width(), series.height() / 2);
+
+  My::GammaNN NN(src_data, { }, 1, 1);
+
+  std::vector< My::UI > patterns(src_data.height() - 1);
+
+  for(int i = 0; i < patterns.size(); i++) {
+    patterns[i] = i+1;
+  }
+
+  const double eps = 0.01;
+  int epochs = 0;
+  double err;
+
+  do {
+    err = std::pow(NN.learn(patterns)*2, 0.5);
+    epochs++;
+    if (!(epochs%10000) || epochs == 1) std::cout << epochs << " : err = " << err << std::endl;
+  } while (err > eps && epochs < 100000);
+
+  //if (err > eps)
+  std::cout << "epochs = " << epochs << std::endl << "err = " << err << std::endl;
+
+  ////serializing test
+  // if (false)
+  // {
+  //   std::stringstream s;
+  //   s << NN;
+  //
+  //   auto str = s.str();
+  //
+  //   p = My::Perceptron();
+  //   s >> p;
+  //
+  //   s = std::stringstream();
+  //   s << p;
+  //
+  //   std::cout << "\nserializing test " << (str == s.str() ? "passed" : "failed") << "\n\n";
+  // }
+
+  int i_restrictor = series.height()/2 + std::min(4, series.height() / 2);
+  for (int i = series.height() / 2; i < i_restrictor; i++) {
+    std::cout << i << " : "
+      << "real = " << std::vector< double >(series[i])
+      << " \t\t "
+      << "NN = " << NN[i]
+      << std::endl;
+  }
+
+  std::cout << std::flush;
+}
+
+}
 
 // [[Rcpp::export]]
 Rcpp::RObject test() {
-  perceptron_test();
+  GammaNN_test(get_series_of_one());
   return Rcpp::RObject();
 }
