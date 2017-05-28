@@ -136,18 +136,17 @@ namespace My {
 
       set_value(result_by_derivative, 0);
       result_by_derivative.resize((*series_ptr).get_object_dimention());
-      //result_by_derivative need fix
-      // {
-      // if (index) {
-      //   result_by_derivative += (*series_ptr)[index - 1];
-      //   auto one_minus_weight_copy = one_minus_weight;
-      //   for (UI i = 2; i <= index; i++) {
-      //     result_by_derivative += i * ((*series_ptr)[index - i] * one_minus_weight_copy);
-      //     if (i < index) one_minus_weight_copy *= one_minus_weight_copy;
-      //   }
-      // }
-      // result_by_derivative = result - weight * result_by_derivative;
-      // }
+      {
+        if (index) {
+          result_by_derivative = (*series_ptr)[index - 1];
+          auto one_minus_weight_copy = one_minus_weight;
+          for (UI i = 2; i <= index; i++) {
+            result_by_derivative += i * ((*series_ptr)[index - i] * one_minus_weight_copy);
+            if (i < index) one_minus_weight_copy *= one_minus_weight_copy;
+          }
+        }
+        result_by_derivative = result - weight * result_by_derivative;
+      }
 
       return weight * result;
     }

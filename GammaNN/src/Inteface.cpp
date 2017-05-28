@@ -229,7 +229,7 @@ void GammaNN_test(const My::matrix< double >& series) {
 
   auto src_data = sub_matrix(series, {0, 0}, series.width(), series.height() / 2);
 
-  My::GammaNN NN(src_data, {  }, 0, 1);
+  My::GammaNN NN(src_data, { 2 }, 2, 0);
 
   std::vector< My::UI > patterns(src_data.height() - NN.get_min_learn_pattern());
 
