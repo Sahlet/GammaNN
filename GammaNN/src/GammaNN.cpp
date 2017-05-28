@@ -3,10 +3,12 @@
 #ifndef __GAMMANN_CPP__
 #define __GAMMANN_CPP__
 
+#include <iostream>
 #include <My/GammaNN.h>
 
 #define MIN_WEIGHT 0.01
 #define MAX_WEIGHT 1.99
+#define AREA_AROUND_ONE 0.05
 
 namespace My {
 
@@ -42,16 +44,16 @@ namespace My {
     friend inline std::ostream& operator & (std::ostream& os, const My::GammaUnit& g);
     friend inline std::istream& operator & (std::istream& is, My::GammaUnit& g);
     GammaNN::object weight;
+    GammaNN::object one_minus_weight;
     GammaNN::object weight_delta;
     GammaNN::object result;
     GammaNN::object result_by_derivative;
     UI result_number = 0;
 
-
-    //::operator& (STREAM, GUNIT.weight)
 #define SERIALIZE_GammaUnit(STREAM, GUNIT)\
           STREAM                          \
           & GUNIT.weight                  \
+          & GUNIT.one_minus_weight        \
           & GUNIT.weight_delta            \
           & GUNIT.result                  \
           & GUNIT.result_by_derivative    \
@@ -68,11 +70,14 @@ namespace My {
     void clear_all() {
       clear_learning();
       set_value(weight, 0);
+      set_value(one_minus_weight, 1);
     }
 
     GammaUnit() {}
     GammaUnit(Series& series) : series_ptr(&series) {
       weight.resize(series.get_object_dimention());
+      one_minus_weight.resize(series.get_object_dimention());
+      set_value(one_minus_weight, 1);
       result.resize(series.get_object_dimention());
       random_weight_init();
     }
@@ -88,7 +93,7 @@ namespace My {
       set_value(result, 0);
     }
     void next() {
-      if (result_number) result *= (1 - weight);
+      if (result_number) result *= one_minus_weight;
       result += (*series_ptr)[result_number];
       result_number++;
     }
@@ -99,19 +104,29 @@ namespace My {
     typedef Perceptron::errors errors;
     void clear_learning() {
       clear_result();
-      set_value(result_by_derivative, 0);
       result_by_derivative.clear();
       weight_delta.clear();
     }
+
+    void clamp_weight() {
+      weight = clamp(weight, MIN_WEIGHT, MAX_WEIGHT);
+      for (auto& w : weight) {
+        if (w > (1 - AREA_AROUND_ONE/2) && w < (1 + AREA_AROUND_ONE/2)) {
+          w = (1 - AREA_AROUND_ONE/2) + (std::rand()%2)*AREA_AROUND_ONE;
+        }
+      }
+      one_minus_weight = 1 - weight;
+    }
+
     void random_weight_init() {
       for (auto& w : weight) {
         w = (MIN_WEIGHT + ((std::rand() % 10000) / 10000.0) * (MAX_WEIGHT - MIN_WEIGHT));
       }
+      clamp_weight();
+      //one_minus_weight = 1 - weight;
     }
     GammaNN::object operator[](const UI index) {
-      clear_learning();
-
-      GammaNN::object one_minus_weight = (1 - weight);
+      clear_result();
 
       result += (*series_ptr)[0];
       for (result_number = 1; result_number <= index; result_number++) {
@@ -119,15 +134,20 @@ namespace My {
         result += (*series_ptr)[result_number];
       }
 
+      set_value(result_by_derivative, 0);
       result_by_derivative.resize((*series_ptr).get_object_dimention());
-      if (index) {
-        result_by_derivative += (*series_ptr)[index - 1];
-        for (UI i = 2; i <= index; i++) {
-          result_by_derivative += i * ((*series_ptr)[index - i] * one_minus_weight);
-          if (i < index) one_minus_weight *= one_minus_weight;
-        }
-      }
-      result_by_derivative = result - weight * result_by_derivative;
+      //result_by_derivative need fix
+      // {
+      // if (index) {
+      //   result_by_derivative += (*series_ptr)[index - 1];
+      //   auto one_minus_weight_copy = one_minus_weight;
+      //   for (UI i = 2; i <= index; i++) {
+      //     result_by_derivative += i * ((*series_ptr)[index - i] * one_minus_weight_copy);
+      //     if (i < index) one_minus_weight_copy *= one_minus_weight_copy;
+      //   }
+      // }
+      // result_by_derivative = result - weight * result_by_derivative;
+      // }
 
       return weight * result;
     }
@@ -141,24 +161,33 @@ namespace My {
 
       weight_delta += e;
 
+      //set_value(result_by_derivative, 0);
+
       return std::move(e);
     }
+
+    //int counter = 1;
 
     void flush() {
       const double speed = 1;
       weight -= speed * weight_delta;
-      weight = clamp(weight, MIN_WEIGHT, MAX_WEIGHT);
+      clamp_weight();
+      //one_minus_weight = 1 - weight;
       set_value(weight_delta, 0);
+
+      ////if (counter == 1) std::cout << counter << " : weight = " << weight << std::endl;
+      //if (!(counter%10000) || counter == 1) std::cout << counter << " : weight = " << weight << std::endl;
+      //counter++;
     }
 
   };
 
   inline std::ostream& operator & (std::ostream& os, const My::GammaUnit& g) {
-    //SERIALIZE_GammaUnit(os, g);
+    SERIALIZE_GammaUnit(os, g);
     return os;
   }
   inline std::istream& operator & (std::istream& is, My::GammaUnit& g) {
-    //SERIALIZE_GammaUnit(is, g);
+    SERIALIZE_GammaUnit(is, g);
     return is;
   }
 
@@ -183,6 +212,9 @@ namespace My {
   }
   US GammaNN::get_trace_size() {
     return members->trace_size;
+  }
+  US GammaNN::get_min_learn_pattern() {
+    return std::max(get_trace_size(), US(1));
   }
   US GammaNN::get_series_size() {
     return members->series.size();
@@ -213,7 +245,7 @@ namespace My {
       }
     }
 
-    members->p = My::Perceptron(get_object_dimention() * (get_units_number() + 1), get_object_dimention(), hidden);
+    members->p = My::Perceptron(get_object_dimention() * (get_units_number() + get_trace_size()), get_object_dimention(), hidden);
 
   }
 
@@ -222,8 +254,8 @@ namespace My {
 
     UI series_size = members->series.size();
     for (auto& pattern : patterns) {
-      if (pattern >= series_size || pattern < get_trace_size())
-        throw std::range_error("pattern >= series_size ||  || pattern < trace_size");
+      if (pattern >= series_size || pattern < get_min_learn_pattern())
+        throw std::range_error("pattern >= series_size || pattern < get_min_learn_pattern()");
     }
 
     double global_error = 0;
@@ -236,6 +268,9 @@ namespace My {
       for (UI j = get_units_number(), obj_number = 1; j < input.height(); j++, obj_number++) {
         input[j] = members->series[pattern - obj_number];
       }
+
+      //static int count = 0;
+      //if (count++ < 20) std::cout << " input = " << input.get_vec() << std::endl;
 
       auto e = members->p.forward_prop(input.get_vec()) - members->series[pattern];
       global_error += (e, e);
@@ -257,6 +292,13 @@ namespace My {
     }
 
     return global_error / 2;
+  }
+
+  void GammaNN::clear_learning() {
+    for(auto& unit : members->units) {
+      unit.clear_learning();
+    }
+    members->p.release_buffer();
   }
 
   GammaNN::object GammaNN::operator[](UI index) {
