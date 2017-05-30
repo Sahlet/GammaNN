@@ -307,6 +307,9 @@ GammaNN/include/*
 !GammaNN/include/Perceptron.*
 !GammaNN/include/matrix.*
 !GammaNN/include/string.*
+!GammaNN/include/GammaNN.*
+!GammaNN/include/Serialization.*
+!GammaNN/include/VectorAlgebra.h.*
 
 *.sln
 *.vcxproj

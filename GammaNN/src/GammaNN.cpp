@@ -195,6 +195,7 @@ namespace My {
     std::vector< GammaUnit > units;
     const UI trace_size;
     My::Perceptron p;
+    std::vector< std::string > col_names;
 
     GammaNN_members(My::matrix< double > src_data, const UI trace_size) : series(std::move(src_data)), trace_size(trace_size) {}
   };
@@ -222,6 +223,14 @@ namespace My {
     return members->series.src_data.height();
   }
 
+  std::vector< std::string > GammaNN::get_col_names() {
+    return members->col_names;
+  }
+  void GammaNN::set_col_names(std::vector< std::string > names) {
+    if (names.size() != get_object_dimention()) throw (std::invalid_argument("incorect names vector dimention"));
+    members->col_names = std::move(names);
+  }
+
 
   GammaNN::GammaNN(
     My::matrix< double > data,
@@ -245,6 +254,11 @@ namespace My {
     }
 
     members->p = My::Perceptron(get_object_dimention() * (get_units_number() + get_trace_size()), get_object_dimention(), hidden);
+
+    members->col_names.reserve(get_object_dimention());
+    for (US i = 0; i < get_object_dimention(); i++) {
+      members->col_names.emplace_back("x" + std::to_string(i));
+    }
 
   }
 

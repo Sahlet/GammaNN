@@ -321,3 +321,15 @@ Rcpp::RObject test() {
   //perceptron_test();
   return Rcpp::RObject();
 }
+
+// [[Rcpp::export]]
+Rcpp::RObject learn(Rcpp::Frame frame, std::vector< My::US > hidden, int units, int trace_size) {
+
+  My::matrix<double> src_data = frame;
+
+  std::shared_ptr< GammaNN > NN(new GammaNN(src_data, hidden, units, trace_size));
+
+  NN->set_col_names(frame->col_names);
+
+  return Rcpp::wrap(NN);
+}
