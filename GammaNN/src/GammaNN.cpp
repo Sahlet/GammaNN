@@ -3,8 +3,8 @@
 #ifndef __GAMMANN_CPP__
 #define __GAMMANN_CPP__
 
-#include <iostream>
 #include <My/GammaNN.h>
+#include <iostream>
 
 #define MIN_WEIGHT 0.01
 #define MAX_WEIGHT 1.99
@@ -226,7 +226,7 @@ namespace My {
   std::vector< std::string > GammaNN::get_col_names() {
     return members->col_names;
   }
-  void GammaNN::set_col_names(std::vector< std::string > names) {
+  void GammaNN::set_col_names(std::vector< std::string > names) throw (std::invalid_argument) {
     if (names.size() != get_object_dimention()) throw (std::invalid_argument("incorect names vector dimention"));
     members->col_names = std::move(names);
   }

@@ -1,6 +1,7 @@
 // [[Rcpp::plugins(cpp11)]]
 
 #include <Rcpp.h>
+//#include <XPtr.h>
 #include <My/Perceptron.h>
 #include <My/GammaNN.h>
 #include <assert.h>
@@ -266,22 +267,22 @@ void GammaNN_test(const My::matrix< double >& series) {
   //if (err > eps)
   std::cout << "epochs = " << epochs << std::endl << "err = " << err << std::endl;
 
-  ////serializing test
-  // if (false)
-  // {
-  //   std::stringstream s;
-  //   s << NN;
-  //
-  //   auto str = s.str();
-  //
-  //   p = My::Perceptron();
-  //   s >> p;
-  //
-  //   s = std::stringstream();
-  //   s << p;
-  //
-  //   std::cout << "\nserializing test " << (str == s.str() ? "passed" : "failed") << "\n\n";
-  // }
+  //serializing test
+  if (false)
+  {
+    std::stringstream s;
+    s << NN;
+
+    auto str = s.str();
+
+    NN = My::GammaNN();
+    s >> NN;
+
+    s = std::stringstream();
+    s << NN;
+
+    std::cout << "\nserializing test " << (str == s.str() ? "passed" : "failed") << "\n\n";
+  }
 
   int i_restrictor = series.height()/2 + std::min(4, series.height() / 2);
   for (int i = series.height() / 2; i < i_restrictor; i++) {
@@ -322,14 +323,120 @@ Rcpp::RObject test() {
   return Rcpp::RObject();
 }
 
+typedef Rcpp::XPtr< My::GammaNN > NNptr;
+
 // [[Rcpp::export]]
-Rcpp::RObject learn(Rcpp::Frame frame, std::vector< My::US > hidden, int units, int trace_size) {
+NNptr learn(  Rcpp::DataFrame frame, std::vector< My::US > hidden, My::US units, My::US trace_size,
+              const double eps, const My::UI batch_size, const bool random_patterns, const My::UI max_epoch_number
+            ) {
+  My::matrix<double> src_data(frame.ncol(), frame.nrow());
 
-  My::matrix<double> src_data = frame;
+  std::vector< Rcpp::NumericVector > column(frame.ncol());
 
-  std::shared_ptr< GammaNN > NN(new GammaNN(src_data, hidden, units, trace_size));
+  for (My::US j = 0; j < frame.ncol(); j++) {
+    column[j] = frame[j];
+  }
 
-  NN->set_col_names(frame->col_names);
+  for (My::US i = 0; i < src_data.height(); i++) {
+    for (My::US j = 0; j < src_data.width(); j++) {
+      src_data(i, j) = column[j][i];
+    }
+  }
 
-  return Rcpp::wrap(NN);
+  column.clear();
+
+  NNptr R_NN(new My::GammaNN(std::move(src_data), hidden, units, trace_size));
+
+  My::GammaNN &NN = *R_NN;
+
+  std::vector< My::UI > patterns(src_data.height() - NN.get_min_learn_pattern());
+
+  for(int i = 0; i < patterns.size(); i++) {
+    patterns[i] = i + NN.get_min_learn_pattern();
+  }
+
+  int epochs = 0;
+  double err;
+
+  do {
+    err = 0;
+    if (random_patterns) {
+      int iter_count = (1 * patterns.size()) / batch_size;
+      for (int i = 0; i < iter_count; i++) {
+        err += std::pow(NN.learn(get_random_subvector(patterns, batch_size))*2, 0.5);
+      }
+    } else {
+      for (auto iter = patterns.begin() + batch_size; true; iter += batch_size) {
+        err += std::pow(NN.learn(std::vector< My::UI >(iter - batch_size, iter))*2, 0.5);
+        if (iter >= patterns.end() - batch_size) break;
+      }
+    }
+    epochs++;
+    if (!(epochs%10000) || epochs == 1) std::cout << epochs << " : err = " << err << std::endl;
+  } while (err > eps && epochs < max_epoch_number);
+
+  NN.clear_learning();
+
+  //if (err > eps)
+  std::cout << "epochs = " << epochs << std::endl << "err = " << err << std::endl;
+
+  NN.set_col_names(Rcpp::as< std::vector< std::string > > (frame.names()));
+
+  return R_NN;
+}
+
+// [[Rcpp::export]]
+Rcpp::DataFrame get_series(NNptr R_NN, std::vector< My::US > object_numbers) {
+  Rcpp::DataFrame frame;
+
+  if (!object_numbers.size()) return frame;
+
+  std::vector< std::vector< double > > columns(R_NN->get_object_dimention());
+  for (auto& column : columns) {
+    column.resize(object_numbers.size());
+  }
+
+  for (int j = 0; j < object_numbers.size(); j++) {
+    auto object = (*R_NN)[object_numbers[j]];
+    for (int i = 0; i < columns.size(); i++) {
+      columns[i][j] = object[i];
+    }
+  }
+
+  auto col_names = R_NN->get_col_names();
+  for (int i = 0; i < columns.size(); i++) {
+    frame.push_back(std::move(columns[i]), col_names[i]);
+  }
+
+  return frame;
+}
+
+// [[Rcpp::export]]
+std::vector< std::string > get_col_names(NNptr R_NN) {
+  return R_NN->get_col_names();
+}
+
+// [[Rcpp::export]]
+My::UI get_series_length(NNptr R_NN) {
+  return R_NN->get_series_size();
+}
+
+// [[Rcpp::export]]
+My::UI get_src_series_length(NNptr R_NN) {
+  return R_NN->get_src_series_size();
+}
+
+// [[Rcpp::export]]
+NNptr to_GammaNN(std::string str) {
+  NNptr R_NN(new My::GammaNN);
+  std::stringstream s(str);
+  s >> *R_NN.get();
+  return R_NN;
+}
+
+// [[Rcpp::export]]
+std::string to_str(NNptr R_NN) {
+  std::stringstream s;
+  s << *R_NN.get();
+  return s.str();
 }

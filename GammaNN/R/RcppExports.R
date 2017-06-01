@@ -7,4 +7,47 @@ rcpp_hello <- function() {
 test <- function() {
   .Call('GammaNN_test', PACKAGE = 'GammaNN');
 }
-
+learn <- function(frame, hidden, units, trace_size, eps, batch_size, random_patterns, max_epoch_number) {
+  .Call('GammaNN_learn',
+        frame, hidden, units, trace_size,
+        eps, batch_size, random_patterns,
+        max_epoch_number,
+        PACKAGE = 'GammaNN'
+  );
+}
+get_series <- function(NN, object_numbers) {
+  .Call('GammaNN_get_series',
+        NN, object_numbers,
+        PACKAGE = 'GammaNN'
+  );
+}
+get_series_name <- function(NN) {
+  .Call('GammaNN_get_series_name',
+        NN,
+        PACKAGE = 'GammaNN'
+  );
+}
+get_series_length <- function(NN) {
+  .Call('GammaNN_get_series_length',
+        NN,
+        PACKAGE = 'GammaNN'
+  );
+}
+get_src_series_length <- function(NN) {
+  .Call('GammaNN_get_src_series_length',
+        NN,
+        PACKAGE = 'GammaNN'
+  );
+}
+to_GammaNN <- function(str) {
+  .Call('GammaNN_to_GammaNN',
+        str,
+        PACKAGE = 'GammaNN'
+  );
+}
+to_str <- function(NN) {
+  .Call('GammaNN_to_str',
+        NN,
+        PACKAGE = 'GammaNN'
+  );
+}

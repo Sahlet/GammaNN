@@ -20,16 +20,20 @@ fluidPage(
           radioButtons('sep', 'Separator', c( Space = '', Comma=',', Semicolon=';' ), ','),
           br(),
           br(),
-          sliderInput("training_data_percent", "training data percent",
-                      min = 30, max = 80, value = 60, step= 1),
-          numericInput("hidden_layers", "Hidden layers number", 3, min = 0, max = 20, step = 1),
-          numericInput("hidden_layers_width", "Hidden layers width", 3, min = 1, max = 10, step = 1),
-          numericInput("gamma_units", "Gamma units number", 5, min = 0, max = 20, step = 1),
-          numericInput("trace_size", "Trace size", 1, min = 1, max = 20, step = 1),
-          br(),
-          br(),
           conditionalPanel(
             condition = "output.learn_button_is_visible",
+            sliderInput("training_data", "Training data",
+                        value = 60, min = 30, max = 80, step= 1),
+            sliderInput("hidden_layers", "Hidden layers number", value = 2, min = 0, max = 20, step = 1),
+            sliderInput("hidden_layers_width", "Hidden layers width", value = 3, min = 1, max = 20, step = 1),
+            sliderInput("gamma_units", "Gamma units number", value = 2, min = 0, max = 20, step = 1),
+            sliderInput("trace_size", "Trace size", value = 1, min = 1, max = 20, step = 1),
+            numericInput("eps", "Eps", value = 0.01, min = 0.001, step = 0.001),
+            sliderInput("batch_size", "Batch size", value = 1, min = 1, max = 1, step = 1),
+            checkboxInput('random_patterns', 'Random patterns', FALSE),
+            sliderInput("max_epoch_number", "Max epoch", value = 50000, min = 10000, max = 1000000, step = 10000),
+            br(),
+            br(),
             actionButton("learn", "Learn")
           )
         ),
@@ -64,28 +68,5 @@ fluidPage(
   )
 
 )
-
-# fluidPage(
-#   actionButton('insertBtn1', 'Insert placeholder2'),
-#   actionButton('insertBtn', 'Insert'),
-#   actionButton('removeBtn', 'Remove'),
-#   
-#   titlePanel("Predicted Deaths from Lung Disease (UK)"),
-#   
-#   sidebarLayout(
-#     sidebarPanel(
-#       numericInput("months", label = "Months to Predict",
-#                    value = 72, min = 12, max = 144, step = 12),
-#       selectInput("interval", label = "Prediction Interval",
-#                   choices = c("0.80", "0.90", "0.95", "0.99"),
-#                   selected = "0.95"),
-#       checkboxInput("showgrid", label = "Show Grid", value = TRUE)
-#     ),
-#     mainPanel(
-#       tags$div(id = 'placeholder'),
-#       dygraphOutput("dygraph")
-#     )
-#   )
-# )
 
 #)

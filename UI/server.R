@@ -1,6 +1,8 @@
 library(shiny)
 library(dygraphs)
+library(xts)
 library(datasets)
+library(GammaNN)
 
 shinyServer(function(input, output, session) {
   insertUI(
@@ -27,8 +29,10 @@ shinyServer(function(input, output, session) {
       ui = graph
     )
   }
-
-  get_table <- reactive({
+  
+  fields <- reactiveValues(NN = NULL, learned = FALSE);
+  
+  get_table_from_file <- reactive({
     result <- NULL;
     if (!is.null(input$CSV_loader) && !is.null(input$CSV_loader$datapath)) {
       result <- read.table(input$CSV_loader$datapath, header=input$header, sep=input$sep);
@@ -39,64 +43,85 @@ shinyServer(function(input, output, session) {
         }
         colnames(result) <- column_names;
       }
+      
+      updateSliderInput(session, "batch_size",
+                        label = "Batch size",
+                        min = 1, max = nrow(result),
+                        value = 1,
+                        step = 1
+      );
+      
+      updateSliderInput(session, "training_data",
+                        label = "Training data",
+                        min = 1, max = as.integer(nrow(result)*0.8),
+                        value = as.integer(nrow(result)*0.5),
+                        step = 1
+      );
     }
-
+    
     return(result);
   });
 
+  get_table <- reactive({
+    if (!is.null(fields$NN) && !fields$learned) {
+      return(as.data.frame(GammaNN::get_series(fields$NN, 1:GammaNN::get_src_series_length(fields$NN))));
+    } else {
+      return(get_table_from_file());
+    }
+
+    return(NULL);
+  });
+
   output$learn_button_is_visible <- reactive({
-    return(!is.null(get_table()));
+    return(!is.null(get_table_from_file()));
   });
   outputOptions(output, 'learn_button_is_visible', suspendWhenHidden=FALSE);
+  
+  refresh_graphs <- reactive({
+    object_numbers <- ((input$prediction_range)[1] : (input$prediction_range)[2]);
+    
+    #NN_series is frame
+    NN_series <- as.data.frame(GammaNN::get_series(fields$NN, object_numbers));
+    
+    objects <- data.frame(matrix(0, ncol = ncol(get_table()), nrow = length(object_numbers)));
 
-  fields <- reactiveValues(NN = NULL);
+    for (i in object_numbers) {
+      objects[i,] <- get_table()[i,];
+    }
+    colnames(objects) <- colnames(get_table());
+    
+    for (i in 1:ncol(NN_series)) {
+      name <- paste0("dygraph_graph", as.character(i));
+      output[[name]] <- renderDygraph ({
+        i_series <- list(time = object_numbers, predicted = NN_series[[i]]);
+        if (fields$learned) {
+          i_series$src = objects[[i]];
+        }
+        return(
+            dygraph(i_series, main = colnames(NN_series)[i])
+        );
+      });
+      
+      insert_series_graph(dygraphOutput(name));
+    }
+  });
 
   prev_NN_exists <- FALSE;
-
+  
   output$NN_exists <- reactive({
     result <- !is.null(fields$NN);
 
     if (prev_NN_exists != result) {
       prev_NN_exists = result;
       clear_series_graphs_container();
-      if (!result) {
-      } else {
-        series_graphs <- list();
-        length(series_graphs) <- GammaNN::get_obj_dimention(fields$NN);
-        for (i in 1:length(series_graphs)) {
-          name <- paste0("dygraph_graph", as.character(i));
-          output[[name]] <- renderDygraph ({
-            i_series_name <- GammaNN::get_series_name(fields$NN, i)
-
-            object_numbers <- (input$prediction_range)[1] : (input$prediction_range)[2];
-            NN_series <- GammaNN::get_series(fields$NN, i, object_numbers)
-
-            if (is.null(get_table()) || (ncol(get_table()) < (input$prediction_range)[1])) {
-              i_series <- cbind(NN_series);
-              return(
-                dygraph(i_series, main = i_series_name)# %>%
-                #dySeries(c("lwr", "fit", "upr"), label = "Deaths") #%>%
-                #dyOptions(drawGrid = input$showgrid)
-              )
-            } else {
-              i_series <- cbind(NN_series, get_table()[object_numbers,i]);
-              return(
-                dygraph(i_series, main = i_series_name) %>%
-                dySeries(c(i_series_name, "src"), label = "1231231qwdsdc2 Deaths")
-              )
-            }
-          });
-
-          series_graphs[[i]] <- graph;
-          insert_series_graph(dygraphOutput(name));
-        }
-        fields$series_graphs <- series_graphs;
-
-        updateSliderInput(session, "prediction_range",
-                          label = "Range:",
-                          min = 1, max = GammaNN::get_series_length(fields$NN) + 500,
-                          value = c(1, GammaNN::get_series_length(fields$NN)),
-                          step = 1
+      if (result) {
+        
+        updateSliderInput(
+          session, "prediction_range",
+          label = "Range:",
+          min = 1, max = GammaNN::get_series_length(fields$NN) + 500,
+          value = c(1, GammaNN::get_series_length(fields$NN)),
+          step = 1
         );
       }
     }
@@ -104,9 +129,30 @@ shinyServer(function(input, output, session) {
     return(result);
   });
   outputOptions(output, 'NN_exists', suspendWhenHidden=FALSE);
+  
+  observeEvent(input$prediction_range, {
+    if (!is.null(fields$NN)) {
+      refresh_graphs();
+    }
+  })
 
   observeEvent(input$learn, {
-    fields$NN <- GammaNN::learn(get_table(), rep(input$hidden_layers_width, input$hidden_layers), input$gamma_units, input$trace_size);
+    objects <- data.frame(matrix(0, ncol = ncol(get_table()), nrow = input$training_data));
+    
+    for (i in 1:input$training_data) {
+      objects[i,] <- get_table()[i,];
+    }
+    colnames(objects) <- colnames(get_table());
+    
+    fields$NN <-
+      GammaNN::learn(
+        objects, rep(input$hidden_layers_width, input$hidden_layers),
+        input$gamma_units, input$trace_size,
+        input$eps, input$batch_size, input$random_patterns,
+        input$max_epoch_number
+      );
+    
+    fields$learned <- TRUE;
   })
 
   observeEvent(input$NN_uploader, {
@@ -117,6 +163,7 @@ shinyServer(function(input, output, session) {
     if (is.null(str)) return();
 
     fields$NN <- GammaNN::to_GammaNN(str);
+    fields$learned <- FALSE;
   })
 
   output$NN_downloader <- downloadHandler (
@@ -129,31 +176,3 @@ shinyServer(function(input, output, session) {
   )
 
 })
-
-# shinyServer(function(input, output) {
-# 
-#   predicted <- reactive({
-#     hw <- HoltWinters(ldeaths)
-#     predict(hw, n.ahead = input$months,
-#             prediction.interval = TRUE,
-#             level = as.numeric(input$interval))
-#   })
-# 
-#   output$dygraph <- renderDygraph({
-#     dygraph(predicted(), main = "Predicted Deaths/Month") %>%
-#       dySeries(c("lwr", "fit", "upr"), label = "Deaths") %>%
-#       dyOptions(drawGrid = input$showgrid)
-#   })
-#   
-#   output$members <- renderDygraph({
-#       dygraph(predicted(), main = "Predicted Deaths/Month")
-#     })
-# 
-#   observeEvent(input$Btn, {
-#       insertUI(
-#         selector = '#placeholder',
-#         ui = dygraphOutput("members")
-#       );
-#   })
-# 
-# })
