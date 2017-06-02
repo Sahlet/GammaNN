@@ -28,6 +28,10 @@ shinyServer(function(input, output, session) {
       selector = '#series_graphs_1',
       ui = graph
     )
+    insertUI(
+      selector = '#series_graphs_1',
+      ui = br()
+    )
   }
   
   fields <- reactiveValues(NN = NULL, learned = FALSE);
@@ -78,6 +82,7 @@ shinyServer(function(input, output, session) {
   outputOptions(output, 'learn_button_is_visible', suspendWhenHidden=FALSE);
   
   refresh_graphs <- reactive({
+    clear_series_graphs_container();
     object_numbers <- ((input$prediction_range)[1] : (input$prediction_range)[2]);
     
     #NN_series is frame
@@ -92,15 +97,18 @@ shinyServer(function(input, output, session) {
     
     for (i in 1:ncol(NN_series)) {
       name <- paste0("dygraph_graph", as.character(i));
-      output[[name]] <- renderDygraph ({
-        i_series <- list(time = object_numbers, predicted = NN_series[[i]]);
-        if (fields$learned) {
-          i_series$src = objects[[i]];
-        }
-        return(
-            dygraph(i_series, main = colnames(NN_series)[i])
-        );
-      });
+      local({
+        my_i <- i;
+        output[[name]] <- renderDygraph ({
+          i_series <- list(time = object_numbers, predicted = NN_series[[my_i]]);
+          if (fields$learned) {
+            i_series$src = objects[[my_i]];
+          }
+          return(
+              dygraph(i_series, main = colnames(NN_series)[my_i])
+          );
+        });
+      })
       
       insert_series_graph(dygraphOutput(name));
     }
