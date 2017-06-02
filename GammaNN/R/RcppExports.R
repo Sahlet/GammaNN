@@ -51,3 +51,15 @@ to_str <- function(NN) {
         PACKAGE = 'GammaNN'
   );
 }
+create_from_file <- function(file_path) {
+  .Call('GammaNN_create_from_file',
+        file_path,
+        PACKAGE = 'GammaNN'
+  );
+}
+write_to_file <- function(NN, file_path) {
+  .Call('GammaNN_write_to_file',
+        NN, file_path,
+        PACKAGE = 'GammaNN'
+  );
+}

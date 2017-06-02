@@ -268,7 +268,7 @@ void GammaNN_test(const My::matrix< double >& series) {
   std::cout << "epochs = " << epochs << std::endl << "err = " << err << std::endl;
 
   //serializing test
-  if (false)
+  //if (false)
   {
     std::stringstream s;
     s << NN;
@@ -372,7 +372,7 @@ NNptr learn(  Rcpp::DataFrame frame, std::vector< My::US > hidden, My::US units,
       }
     }
     epochs++;
-    if (!(epochs%10000) || epochs == 1) std::cout << epochs << " : err = " << err << std::endl;
+    if (!(epochs%1000) || epochs == 1) std::cout << epochs << " : err = " << err << std::endl;
   } while (err > eps && epochs < max_epoch_number);
 
   NN.clear_learning();
@@ -430,13 +430,26 @@ My::UI get_src_series_length(NNptr R_NN) {
 NNptr to_GammaNN(std::string str) {
   NNptr R_NN(new My::GammaNN);
   std::stringstream s(str);
-  s >> *R_NN.get();
+  s >> *R_NN;
   return R_NN;
 }
 
 // [[Rcpp::export]]
 std::string to_str(NNptr R_NN) {
   std::stringstream s;
-  s << *R_NN.get();
+  s << *R_NN;
   return s.str();
+}
+
+// [[Rcpp::export]]
+NNptr create_from_file(std::string file_path) {
+  std::ifstream f(file_path);
+  NNptr R_NN(new My::GammaNN(My::GammaNN::from_stream(f)));
+  return R_NN;
+}
+
+// [[Rcpp::export]]
+void write_to_file(NNptr R_NN, std::string file_path) {
+  std::ofstream f(file_path);
+  R_NN->write_to_stream(f);
 }

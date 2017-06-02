@@ -109,3 +109,22 @@ RcppExport SEXP GammaNN_to_str(SEXP arg1) {
   );
   END_RCPP
 }
+
+//create_from_file
+NNptr create_from_file(std::string file_path);
+RcppExport SEXP GammaNN_create_from_file(SEXP arg1) {
+  BEGIN_RCPP
+  return Rcpp::wrap(
+    create_from_file(Rcpp::as< std::string >(arg1))
+  );
+  END_RCPP
+}
+
+//write_to_file
+void write_to_file(NNptr R_NN, std::string file_path);
+RcppExport SEXP GammaNN_write_to_file(SEXP arg1, SEXP arg2) {
+  BEGIN_RCPP
+  write_to_file(Rcpp::as< NNptr >(arg1), Rcpp::as< std::string >(arg2));
+  return Rcpp::wrap(Rcpp::RObject());
+  END_RCPP
+}

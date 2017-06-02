@@ -362,7 +362,8 @@ namespace My {
     & MEMBERS->series.gen_data                                   \
     & MEMBERS->units                                             \
     & MEMBERS->trace_size                                        \
-    & MEMBERS->p
+    & MEMBERS->p                                                 \
+    & MEMBERS->col_names
 
   void GammaNN::write_to_stream(std::ostream& os) const {
     SERIALIZE_MEMBERS(os, members);

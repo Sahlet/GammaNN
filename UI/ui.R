@@ -31,7 +31,7 @@ fluidPage(
             numericInput("eps", "Eps", value = 0.01, min = 0.001, step = 0.001),
             sliderInput("batch_size", "Batch size", value = 1, min = 1, max = 1, step = 1),
             checkboxInput('random_patterns', 'Random patterns', FALSE),
-            sliderInput("max_epoch_number", "Max epoch", value = 50000, min = 10000, max = 1000000, step = 10000),
+            sliderInput("max_epoch_number", "Max epoch", value = 5000, min = 1000, max = 100000, step = 1000),
             br(),
             br(),
             actionButton("learn", "Learn")

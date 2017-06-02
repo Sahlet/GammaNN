@@ -123,7 +123,6 @@ shinyServer(function(input, output, session) {
       prev_NN_exists = result;
       clear_series_graphs_container();
       if (result) {
-        
         updateSliderInput(
           session, "prediction_range",
           label = "Range:",
@@ -162,15 +161,21 @@ shinyServer(function(input, output, session) {
     
     fields$learned <- TRUE;
   })
+  
+  local_file_path <- paste0(
+    getwd(), '/', 
+    #session$ns("name")
+    "file_buffer"
+  )
 
   observeEvent(input$NN_uploader, {
-    str <- NULL;
     if (!is.null(input$NN_uploader) && !is.null(input$NN_uploader$datapath)) {
-      str <- readChar(input$NN_uploader$datapath, input$NN_uploader$size);
+      file.copy(from = input$NN_uploader$datapath, to = local_file_path)
+    } else {
+      return()
     }
-    if (is.null(str)) return();
 
-    fields$NN <- GammaNN::to_GammaNN(str);
+    fields$NN <- GammaNN::create_from_file(local_file_path);
     fields$learned <- FALSE;
   })
 
@@ -179,7 +184,8 @@ shinyServer(function(input, output, session) {
       return ('Gamma.NN')
     },
     content = function(con) {
-      writeChar(GammaNN::to_str(fields$NN), con)
+      GammaNN::write_to_file(fields$NN, local_file_path)
+      file.copy(from = local_file_path, to = con)
     }
   )
 
