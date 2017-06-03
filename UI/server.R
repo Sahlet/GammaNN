@@ -4,6 +4,31 @@ library(xts)
 library(datasets)
 library(GammaNN)
 
+mean_by_n <- function(vec, n) {
+  res <- vec;
+  length(res) <- 0;
+  i <- 1;
+  while(i <= length(vec)) {
+    next_i <- i + min(length(vec) - i, n - 1);
+    res <- c(res, mean(vec[i:next_i]));
+    i <- next_i + 1;
+  }
+  
+  return(res);
+}
+
+mean_by_n_for_frame <- function(table, n) {
+  res <- list();
+  for (i in 1:ncol(table)) {
+    res[[i]] <- mean_by_n(table[[i]], n);
+  }
+  
+  res <- as.data.frame(res);
+  colnames(res) <- colnames(table);
+  
+  return(res);
+}
+
 shinyServer(function(input, output, session) {
   insertUI(
     selector = '#placeholder',
@@ -48,23 +73,27 @@ shinyServer(function(input, output, session) {
         colnames(result) <- column_names;
       }
       
-      updateSliderInput(session, "batch_size",
-                        label = "Batch size",
-                        min = 1, max = nrow(result),
-                        value = 1,
-                        step = 1
-      );
-      
-      updateSliderInput(session, "training_data",
-                        label = "Training data",
-                        min = 1, max = as.integer(nrow(result)*0.8),
-                        value = as.integer(nrow(result)*0.5),
-                        step = 1
+      updateSliderInput(
+        session, "training_data",
+        label = "Training data",
+        min = 1, max = as.integer(nrow(result)*0.8),
+        value = as.integer(nrow(result)*0.5),
+        step = 1
       );
     }
     
     return(result);
   });
+  
+  observeEvent(input$training_data, {
+    updateSliderInput(
+      session, "batch_size",
+      label = "Batch size",
+      min = 1, max = input$training_data,
+      value = 1,
+      step = 1
+    );
+  })
 
   get_table <- reactive({
     if (!is.null(fields$NN) && !fields$learned) {
@@ -90,8 +119,12 @@ shinyServer(function(input, output, session) {
     
     objects <- data.frame(matrix(0, ncol = ncol(get_table()), nrow = length(object_numbers)));
 
-    for (i in object_numbers) {
-      objects[i,] <- get_table()[i,];
+    {
+      j <- 1;
+      for (i in object_numbers) {
+        objects[j,] <- get_table()[i,];
+        j <- j + 1;
+      }
     }
     colnames(objects) <- colnames(get_table());
     

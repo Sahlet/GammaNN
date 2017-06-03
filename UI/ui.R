@@ -3,7 +3,7 @@ library(dygraphs)
 #shinyUI(
 
 fluidPage(
-  titlePanel("Random processes Lab1"),
+  titlePanel("Time Series prediction using GammaNN"),
 
   sidebarLayout(
     sidebarPanel(
