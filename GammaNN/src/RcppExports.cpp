@@ -31,7 +31,7 @@ RcppExport SEXP GammaNN_test() {
 // learn
 NNptr learn(
       Rcpp::DataFrame frame, std::vector< My::US > hidden, My::US units, My::US trace_size,
-      const double eps, const My::UI batch_size, const bool random_patterns, const My::UI max_epoch_number
+      const double eps, My::UI batch_size, const bool random_patterns, const My::UI max_epoch_number
     );
 RcppExport SEXP GammaNN_learn(SEXP arg1, SEXP arg2, SEXP arg3, SEXP arg4, SEXP arg5, SEXP arg6, SEXP arg7, SEXP arg8) {
   BEGIN_RCPP

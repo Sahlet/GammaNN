@@ -4,31 +4,6 @@ library(xts)
 library(datasets)
 library(GammaNN)
 
-mean_by_n <- function(vec, n) {
-  res <- vec;
-  length(res) <- 0;
-  i <- 1;
-  while(i <= length(vec)) {
-    next_i <- i + min(length(vec) - i, n - 1);
-    res <- c(res, mean(vec[i:next_i]));
-    i <- next_i + 1;
-  }
-  
-  return(res);
-}
-
-mean_by_n_for_frame <- function(table, n) {
-  res <- list();
-  for (i in 1:ncol(table)) {
-    res[[i]] <- mean_by_n(table[[i]], n);
-  }
-  
-  res <- as.data.frame(res);
-  colnames(res) <- colnames(table);
-  
-  return(res);
-}
-
 shinyServer(function(input, output, session) {
   insertUI(
     selector = '#placeholder',
@@ -59,7 +34,11 @@ shinyServer(function(input, output, session) {
     )
   }
   
-  fields <- reactiveValues(NN = NULL, learned = FALSE);
+  fields <- reactiveValues(NN = NULL, learned = FALSE, error = 0, learn_button_click_count_mod_2 = 0);
+  
+  output$error <- renderText({ 
+    paste("Mean error", fields$error);
+  })
   
   get_table_from_file <- reactive({
     result <- NULL;
@@ -118,12 +97,56 @@ shinyServer(function(input, output, session) {
     NN_series <- as.data.frame(GammaNN::get_series(fields$NN, object_numbers));
     
     objects <- data.frame(matrix(0, ncol = ncol(get_table()), nrow = length(object_numbers)));
+    
+    fields$error <- 0;
 
     {
       j <- 1;
       for (i in object_numbers) {
         objects[j,] <- get_table()[i,];
+        
+        for (k in 1:ncol(NN_series)) {
+          err <- abs(objects[j,k] - NN_series[j,k]);
+          if (!is.na(err)) {
+            fields$error <- fields$error + abs(objects[j,k] - NN_series[j,k])
+          }
+        }
+        
         j <- j + 1;
+      }
+      
+      if (GammaNN::get_src_series_length(fields$NN) < nrow(get_table()) &&
+          (
+            (
+              GammaNN::get_src_series_length(fields$NN) < (input$prediction_range)[1]
+              &&
+              (input$prediction_range)[1] <= nrow(get_table())
+            )
+            ||
+            (
+              GammaNN::get_src_series_length(fields$NN) < (input$prediction_range)[2]
+              &&
+              (input$prediction_range)[2] <= nrow(get_table())
+            )
+            ||
+            (
+              (input$prediction_range)[1] <= GammaNN::get_src_series_length(fields$NN)
+              &&
+              nrow(get_table()) <= (input$prediction_range)[2]
+            )
+          )
+      ) {
+        fields$error <- fields$error /
+          (
+            min(
+              (input$prediction_range)[2] - (input$prediction_range)[1] + 1,
+              nrow(get_table()) - GammaNN::get_src_series_length(fields$NN),
+              (input$prediction_range)[2] - GammaNN::get_src_series_length(fields$NN),
+              nrow(get_table()) - (input$prediction_range)[1] + 1
+            )
+            *
+            ncol(get_table())
+          )
       }
     }
     colnames(objects) <- colnames(get_table());
@@ -133,10 +156,11 @@ shinyServer(function(input, output, session) {
       local({
         my_i <- i;
         output[[name]] <- renderDygraph ({
-          i_series <- list(time = object_numbers, predicted = NN_series[[my_i]]);
-          if (fields$learned) {
-            i_series$src = objects[[my_i]];
-          }
+          i_series <- list(
+            time = object_numbers,
+            predicted = NN_series[[my_i]],
+            src = objects[[my_i]]
+          );
           return(
               dygraph(i_series, main = colnames(NN_series)[my_i])
           );
@@ -145,6 +169,7 @@ shinyServer(function(input, output, session) {
       
       insert_series_graph(dygraphOutput(name));
     }
+    
   });
 
   prev_NN_exists <- FALSE;
@@ -159,8 +184,8 @@ shinyServer(function(input, output, session) {
         updateSliderInput(
           session, "prediction_range",
           label = "Range:",
-          min = 1, max = GammaNN::get_series_length(fields$NN) + 500,
-          value = c(1, GammaNN::get_series_length(fields$NN)),
+          min = 1, max = GammaNN::get_src_series_length(fields$NN) + 200,
+          value = c(1, GammaNN::get_src_series_length(fields$NN) + 10 + fields$learn_button_click_count_mod_2),
           step = 1
         );
       }
@@ -184,15 +209,28 @@ shinyServer(function(input, output, session) {
     }
     colnames(objects) <- colnames(get_table());
     
+    hidden <- integer();
+    
+    if (input$rectangle_hidden) {
+      hidden <- rep(input$hidden_layers_width, input$hidden_layers);
+    } else {
+      hidden <- as.integer(strsplit(input$hidden_layers_text, ',')[[1]]);
+    }
+    
     fields$NN <-
       GammaNN::learn(
-        objects, rep(input$hidden_layers_width, input$hidden_layers),
+        objects, hidden,
         input$gamma_units, input$trace_size,
         input$eps, input$batch_size, input$random_patterns,
-        input$max_epoch_number
+        input$max_epoch_number + input$max_epoch_number2
       );
     
     fields$learned <- TRUE;
+    if (fields$learn_button_click_count_mod_2 > 0) {
+      fields$learn_button_click_count_mod_2 <- 1
+    } else {
+      fields$learn_button_click_count_mod_2 <- 0
+    }
   })
   
   local_file_path <- paste0(

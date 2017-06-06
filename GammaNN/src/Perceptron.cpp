@@ -9,7 +9,7 @@
 #define __PRETTY_FUNCTION__ __func__
 #endif
 
-#define LINEAR_OUTS true
+#define LINEAR_OUTS false
 #define BACK_PROP_WITH_REGULARIZATION false
 #define BACK_PROP_WITH_RANDOM true
 #define BACK_PROP_WITH_ADAPTIVE_LEARNING_RATE true
@@ -87,8 +87,12 @@ namespace My {
 			//	weight = (1 - 2 * (std::rand() % 2)) * (0.1 + (std::rand() % 1000) / 5000.0);
 			//}
 
+			// for (auto& weight : weights[i]) {
+			// 	weight = (0.1 + (std::rand() % 10000) / 20000.0);
+			// }
+
 			for (auto& weight : weights[i]) {
-				weight = (0.1 + (std::rand() % 10000) / 20000.0);
+				weight = (1 - 2 * (std::rand() % 2)) * (0.1 + (std::rand() % 10000) / 20000.0);
 			}
 
 			height = width + 1;

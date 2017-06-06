@@ -9,6 +9,7 @@
 #define MIN_WEIGHT 0.01
 #define MAX_WEIGHT 1.99
 #define AREA_AROUND_ONE 0.05
+#define LEARNING_GAMMA_UNITS false
 
 namespace My {
 
@@ -92,6 +93,12 @@ namespace My {
       result_number = 0;
       set_value(result, 0);
     }
+    void clear_and_next_n_times(My::UI n) {
+      clear_result();
+      for (int i = 0; i < n; i++) {
+        next();
+      }
+    }
     void next() {
       if (result_number) result *= one_minus_weight;
       result += (*series_ptr)[result_number];
@@ -125,6 +132,7 @@ namespace My {
       clamp_weight();
       //one_minus_weight = 1 - weight;
     }
+#if LEARNING_GAMMA_UNITS
     GammaNN::object operator[](const UI index) {
       clear_result();
 
@@ -150,6 +158,28 @@ namespace My {
 
       return weight * result;
     }
+#else
+  private:
+    std::vector< GammaNN::object > results;
+  public:
+    GammaNN::object operator[](const UI index) {
+      {
+        UI i = results.size();
+        if (i <= index) {
+          results.reserve(index + 1);
+          for (; i <= index; i++) {
+            if (i) {
+              results.push_back(results[i - 1] * one_minus_weight + (*series_ptr)[i]);
+            } else {
+              results.push_back((*series_ptr)[0]);
+            }
+          }
+        }
+      }
+
+      return weight * results[index];
+    }
+#endif
     GammaUnit::errors put_errors(Perceptron::errors e) throw (std::invalid_argument) {
       if (e.size() != (*series_ptr).get_object_dimention())
         throw std::invalid_argument("GammaUnit(): invalid errors dimention");
@@ -165,18 +195,20 @@ namespace My {
       return std::move(e);
     }
 
-    //int counter = 1;
+    int counter = 1;
 
     void flush() {
       const double speed = 1;
+#if LEARNING_GAMMA_UNITS
       weight -= speed * weight_delta;
+#endif
       clamp_weight();
       //one_minus_weight = 1 - weight;
       set_value(weight_delta, 0);
 
       ////if (counter == 1) std::cout << counter << " : weight = " << weight << std::endl;
-      //if (!(counter%10000) || counter == 1) std::cout << counter << " : weight = " << weight << std::endl;
-      //counter++;
+      if (!(counter%10000) || counter == 1) std::cout << counter << " : weight = " << weight << std::endl;
+      counter++;
     }
 
   };
@@ -222,13 +254,15 @@ namespace My {
   US GammaNN::get_src_series_size() {
     return members->series.src_data.height();
   }
-
   std::vector< std::string > GammaNN::get_col_names() {
     return members->col_names;
   }
   void GammaNN::set_col_names(std::vector< std::string > names) throw (std::invalid_argument) {
     if (names.size() != get_object_dimention()) throw (std::invalid_argument("incorect names vector dimention"));
     members->col_names = std::move(names);
+  }
+  const Perceptron& GammaNN::get_percreptron() {
+    return members->p;
   }
 
 
@@ -267,8 +301,10 @@ namespace My {
 
     UI series_size = members->series.size();
     for (auto& pattern : patterns) {
-      if (pattern >= series_size || pattern < get_min_learn_pattern())
-        throw std::range_error("pattern >= series_size || pattern < get_min_learn_pattern()");
+      if (pattern >= series_size)
+        throw std::range_error("pattern >= series_size");
+      if (pattern < get_min_learn_pattern())
+        throw std::range_error("pattern < get_min_learn_pattern()");
     }
 
     double global_error = 0;
@@ -294,22 +330,26 @@ namespace My {
         std::move(e)
       );
 
+#if LEARNING_GAMMA_UNITS
       for (UI j = 0; j < get_units_number(); j++) {
         members->units[j].put_errors(errors[j]);
       }
+#endif
     }
 
     members->p.flush();
+#if LEARNING_GAMMA_UNITS
     for(auto& unit : members->units) {
       unit.flush();
     }
+#endif
 
     return global_error / 2;
   }
 
   void GammaNN::clear_learning() {
     for(auto& unit : members->units) {
-      unit.clear_learning();
+      unit.clear_and_next_n_times(get_src_series_size());
     }
     members->p.release_buffer();
   }
@@ -318,12 +358,12 @@ namespace My {
     {
       UI i = get_series_size();
       if (i <= index) {
-        members->series.gen_data.reserve(members->series.gen_data.size() + (index - i) + 1);
+        members->series.gen_data.reserve((index - members->series.src_data.height()) + 1);
 
         My::matrix< double > input(get_object_dimention(), get_units_number() + get_trace_size());
         for (; i <= index; i++) {
           for (UI j = 0; j < get_units_number(); j++) {
-            input[j] = members->units[j][i - 1];
+            input[j] = members->units[j].get();
           }
           for (UI j = get_units_number(), obj_number = 1; j < input.height(); j++, obj_number++) {
             input[j] = members->series[i - obj_number];

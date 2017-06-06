@@ -224,13 +224,18 @@ std::vector< T > get_random_subvector(const std::vector< T >& vec, My::US size =
   return std::move(res);
 }
 
-void GammaNN_test(const My::matrix< double >& series) {
+void GammaNN_test(
+    const My::matrix< double >& series,
+    std::vector< My::US > hidden = {3, 3}, My::US units = 1, My::US trace_size = 6,
+    const double eps = 0.01, My::UI batch_size = 1, const bool random_patterns = false,
+    const My::UI max_epoch_number = 100000
+) {
 
   if (series.width() < 1 || series.height() < 2) throw std::invalid_argument("series.width() < 1 || series.height() < 2");
 
   auto src_data = sub_matrix(series, {0, 0}, series.width(), series.height() / 2);
 
-  My::GammaNN NN(src_data, { 2 }, 2, 0);
+  My::GammaNN NN(src_data, hidden, units, trace_size);
 
   std::vector< My::UI > patterns(src_data.height() - NN.get_min_learn_pattern());
 
@@ -238,12 +243,8 @@ void GammaNN_test(const My::matrix< double >& series) {
     patterns[i] = i + NN.get_min_learn_pattern();
   }
 
-  const double eps = 0.01;
   int epochs = 0;
   double err;
-
-  const bool random_patterns = false;
-  const int batch_size = 1;//patterns.size();
 
   do {
     err = 0;
@@ -260,7 +261,7 @@ void GammaNN_test(const My::matrix< double >& series) {
     }
     epochs++;
     if (!(epochs%10000) || epochs == 1) std::cout << epochs << " : err = " << err << std::endl;
-  } while (err > eps && epochs < 100000);
+  } while (err > eps && epochs < max_epoch_number);
 
   NN.clear_learning();
 
@@ -284,7 +285,7 @@ void GammaNN_test(const My::matrix< double >& series) {
     std::cout << "\nserializing test " << (str == s.str() ? "passed" : "failed") << "\n\n";
   }
 
-  int i_restrictor = series.height()/2 + std::min(4, series.height() / 2);
+  int i_restrictor = series.height()/2 + std::min(20, series.height() / 2);
   for (int i = series.height() / 2; i < i_restrictor; i++) {
     std::cout << i << " : "
       << "real = " << std::vector< double >(series[i])
@@ -314,11 +315,31 @@ void GammaNN_test(const My::matrix< double >& series) {
     }
     return My::matrix< double >(1, vec.size(), std::move(vec));
   }
+
+  My::matrix< double > get_periodical_series1() {
+    int periods = 6;
+    std::vector< double > values = {
+      0,
+      0.03587,
+      0.05167,
+      0,
+      0,
+      0.05028,
+      0.02931
+    };
+    std::vector< double > vec(periods * values.size());
+    for (int i = 0; i < periods; i++) {
+      for (int j = 0; j < values.size(); j++) {
+        vec[i*values.size() + j] = values[j];
+      }
+    }
+    return My::matrix< double >(1, vec.size(), std::move(vec));
+  }
 }
 
 // [[Rcpp::export]]
 Rcpp::RObject test() {
-  GammaNN_test(get_series_zero_and_one());
+  GammaNN_test(get_periodical_series1());
   //perceptron_test();
   return Rcpp::RObject();
 }
@@ -327,8 +348,11 @@ typedef Rcpp::XPtr< My::GammaNN > NNptr;
 
 // [[Rcpp::export]]
 NNptr learn(  Rcpp::DataFrame frame, std::vector< My::US > hidden, My::US units, My::US trace_size,
-              const double eps, const My::UI batch_size, const bool random_patterns, const My::UI max_epoch_number
+              const double eps, My::UI batch_size, const bool random_patterns, const My::UI max_epoch_number
             ) {
+
+  std::srand(1);
+
   My::matrix<double> src_data(frame.ncol(), frame.nrow());
 
   std::vector< Rcpp::NumericVector > column(frame.ncol());
@@ -351,6 +375,8 @@ NNptr learn(  Rcpp::DataFrame frame, std::vector< My::US > hidden, My::US units,
 
   std::vector< My::UI > patterns(src_data.height() - NN.get_min_learn_pattern());
 
+  if (batch_size > patterns.size()) batch_size = patterns.size();
+
   for(int i = 0; i < patterns.size(); i++) {
     patterns[i] = i + NN.get_min_learn_pattern();
   }
@@ -358,17 +384,19 @@ NNptr learn(  Rcpp::DataFrame frame, std::vector< My::US > hidden, My::US units,
   int epochs = 0;
   double err;
 
-  do {
+  if (max_epoch_number) do {
     err = 0;
     if (random_patterns) {
-      int iter_count = (1 * patterns.size()) / batch_size;
+      int iter_count = patterns.size() / batch_size + ((patterns.size() % batch_size) > 0);
       for (int i = 0; i < iter_count; i++) {
         err += std::pow(NN.learn(get_random_subvector(patterns, batch_size))*2, 0.5);
       }
     } else {
-      for (auto iter = patterns.begin() + batch_size; true; iter += batch_size) {
-        err += std::pow(NN.learn(std::vector< My::UI >(iter - batch_size, iter))*2, 0.5);
+      auto iter = patterns.begin();
+      while (true) {
+        err += std::pow(NN.learn(std::vector< My::UI >(iter, iter + std::min((int)batch_size, (int)(patterns.end() - iter))))*2, 0.5);
         if (iter >= patterns.end() - batch_size) break;
+        iter += batch_size;
       }
     }
     epochs++;
@@ -381,6 +409,8 @@ NNptr learn(  Rcpp::DataFrame frame, std::vector< My::US > hidden, My::US units,
   std::cout << "epochs = " << epochs << std::endl << "err = " << err << std::endl;
 
   NN.set_col_names(Rcpp::as< std::vector< std::string > > (frame.names()));
+
+  //print_weights(NN.get_percreptron());
 
   return R_NN;
 }
