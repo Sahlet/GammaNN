@@ -37,7 +37,7 @@ shinyServer(function(input, output, session) {
   fields <- reactiveValues(NN = NULL, learned = FALSE, error = 0, learn_button_click_count_mod_2 = 0);
   
   output$error <- renderText({ 
-    paste("Mean error", fields$error);
+    paste("Мean relative error", round(fields$error * 100, digits = 2), "%");# средняя относительная ошибка
   })
   
   get_table_from_file <- reactive({
@@ -108,7 +108,7 @@ shinyServer(function(input, output, session) {
         for (k in 1:ncol(NN_series)) {
           err <- abs(objects[j,k] - NN_series[j,k]);
           if (!is.na(err)) {
-            fields$error <- fields$error + abs(objects[j,k] - NN_series[j,k])
+            fields$error <- fields$error + abs((objects[j,k] - NN_series[j,k]) / objects[j,k])
           }
         }
         
