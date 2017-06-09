@@ -34,10 +34,14 @@ shinyServer(function(input, output, session) {
     )
   }
   
-  fields <- reactiveValues(NN = NULL, learned = FALSE, error = 0, learn_button_click_count_mod_2 = 0);
+  fields <- reactiveValues(NN = NULL, learned = FALSE, mean_relative_error = 0, mse = 0, learn_button_click_count_mod_2 = 0);
   
-  output$error <- renderText({ 
-    paste("Мean relative error", round(fields$error * 100, digits = 2), "%");# средняя относительная ошибка
+  output$mean_relative_error <- renderText({ 
+    paste("Мean relative error", round(fields$mean_relative_error * 100, digits = 2), "%");# средняя относительная ошибка
+  })
+  
+  output$rmse <- renderText({
+    paste("RMSE", round(fields$mse^0.5, digits = 3));# корень среднеквадратической ошибки
   })
   
   get_table_from_file <- reactive({
@@ -64,6 +68,22 @@ shinyServer(function(input, output, session) {
     return(result);
   });
   
+  get_src_data_when_not_learned <- reactive({
+    result <- NULL;
+    if (!is.null(input$src_data_loader) && !is.null(input$src_data_loader$datapath)) {
+      result <- read.table(input$src_data_loader$datapath, header=input$src_data_header, sep=input$src_data_sep);
+      if (!input$src_data_header) {
+        column_names <- as.character(1:ncol(result));
+        for (i in 1:length(column_names)) {
+          column_names[i] <- paste0("x", column_names[i]);
+        }
+        colnames(result) <- column_names;
+      }
+    }
+    
+    return(result);
+  });
+  
   observeEvent(input$training_data, {
     updateSliderInput(
       session, "batch_size",
@@ -75,8 +95,14 @@ shinyServer(function(input, output, session) {
   })
 
   get_table <- reactive({
+    
     if (!is.null(fields$NN) && !fields$learned) {
-      return(as.data.frame(GammaNN::get_series(fields$NN, 1:GammaNN::get_src_series_length(fields$NN))));
+      obj <- get_src_data_when_not_learned();
+      if (!is.null(obj)) {
+        return (obj);
+      } else {
+        return(as.data.frame(GammaNN::get_series(fields$NN, 1:GammaNN::get_src_series_length(fields$NN))));
+      }
     } else {
       return(get_table_from_file());
     }
@@ -89,6 +115,11 @@ shinyServer(function(input, output, session) {
   });
   outputOptions(output, 'learn_button_is_visible', suspendWhenHidden=FALSE);
   
+  output$learned <- reactive({
+    return(fields$learned);
+  });
+  outputOptions(output, 'learned', suspendWhenHidden=FALSE);
+  
   refresh_graphs <- reactive({
     clear_series_graphs_container();
     object_numbers <- ((input$prediction_range)[1] : (input$prediction_range)[2]);
@@ -98,7 +129,8 @@ shinyServer(function(input, output, session) {
     
     objects <- data.frame(matrix(0, ncol = ncol(get_table()), nrow = length(object_numbers)));
     
-    fields$error <- 0;
+    fields$mean_relative_error <- 0;
+    fields$mse <- 0;
 
     {
       j <- 1;
@@ -107,15 +139,23 @@ shinyServer(function(input, output, session) {
         
         for (k in 1:ncol(NN_series)) {
           err <- abs(objects[j,k] - NN_series[j,k]);
-          if (!is.na(err)) {
-            fields$error <- fields$error + abs((objects[j,k] - NN_series[j,k]) / objects[j,k])
+          rerr <- abs(err / objects[j,k])
+          
+          if (!is.na(rerr) && !is.infinite(rerr)) {
+            fields$mean_relative_error <- fields$mean_relative_error + rerr;
+          }
+          
+          if (!is.na(err) && !is.infinite(err)) {
+            fields$mse <- fields$mse + err*err;
           }
         }
         
         j <- j + 1;
       }
       
-      if (GammaNN::get_src_series_length(fields$NN) < nrow(get_table()) &&
+      if (
+        fields$mean_relative_error != 0 &&
+        GammaNN::get_src_series_length(fields$NN) < nrow(get_table()) &&
           (
             (
               GammaNN::get_src_series_length(fields$NN) < (input$prediction_range)[1]
@@ -136,19 +176,24 @@ shinyServer(function(input, output, session) {
             )
           )
       ) {
-        fields$error <- fields$error /
-          (
-            min(
-              (input$prediction_range)[2] - (input$prediction_range)[1] + 1,
-              nrow(get_table()) - GammaNN::get_src_series_length(fields$NN),
-              (input$prediction_range)[2] - GammaNN::get_src_series_length(fields$NN),
-              nrow(get_table()) - (input$prediction_range)[1] + 1
-            )
-            *
-            ncol(get_table())
+        
+        count <- (
+          min(
+            (input$prediction_range)[2] - (input$prediction_range)[1] + 1,
+            nrow(get_table()) - GammaNN::get_src_series_length(fields$NN),
+            (input$prediction_range)[2] - GammaNN::get_src_series_length(fields$NN),
+            nrow(get_table()) - (input$prediction_range)[1] + 1
           )
+          *
+            ncol(get_table())
+        );
+        
+        fields$mean_relative_error <- fields$mean_relative_error / count;
+        fields$mse <- fields$mse / count;
+          
       }
     }
+    
     colnames(objects) <- colnames(get_table());
     
     for (i in 1:ncol(NN_series)) {

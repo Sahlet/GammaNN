@@ -195,7 +195,7 @@ namespace My {
       return std::move(e);
     }
 
-    int counter = 1;
+    //int counter = 1;
 
     void flush() {
       const double speed = 1;
@@ -207,8 +207,8 @@ namespace My {
       set_value(weight_delta, 0);
 
       ////if (counter == 1) std::cout << counter << " : weight = " << weight << std::endl;
-      if (!(counter%10000) || counter == 1) std::cout << counter << " : weight = " << weight << std::endl;
-      counter++;
+      //if (!(counter%10000) || counter == 1) std::cout << counter << " : weight = " << weight << std::endl;
+      //counter++;
     }
 
   };

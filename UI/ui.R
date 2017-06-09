@@ -65,9 +65,20 @@ fluidPage(
                         min = 1, max = 500,
                         value = c(1, 10),
                         step = 1
+            ),
+            textOutput("mean_relative_error"),
+            textOutput("rmse"),
+            conditionalPanel (
+              condition = "!output.learned",
+              br(),
+              fileInput('src_data_loader', 'Choose CSV File to set src data',
+                        accept=c('text/csv',
+                                 'text/comma-separated-values,text/plain',
+                                 '.csv')),
+              checkboxInput('src_data_header', 'Header', TRUE),
+              radioButtons('src_data_sep', 'Separator', c( Space = '', Comma=',', Semicolon=';' ), ',')
             )
-          ),
-          textOutput("error")
+          )
         )
       )
     ),
