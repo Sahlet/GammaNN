@@ -286,7 +286,8 @@ shinyServer(function(input, output, session) {
 
   observeEvent(input$NN_uploader, {
     if (!is.null(input$NN_uploader) && !is.null(input$NN_uploader$datapath)) {
-      file.copy(from = input$NN_uploader$datapath, to = local_file_path)
+      file.remove(local_file_path);
+      file.copy(from = input$NN_uploader$datapath, to = local_file_path);
     } else {
       return()
     }
