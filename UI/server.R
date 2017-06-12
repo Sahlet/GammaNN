@@ -137,7 +137,10 @@ shinyServer(function(input, output, session) {
       for (i in object_numbers) {
         objects[j,] <- get_table()[i,];
         
-        for (k in 1:ncol(NN_series)) {
+        for (k in 1:
+             #1
+             ncol(NN_series)
+             ) {
           err <- abs(objects[j,k] - NN_series[j,k]);
           rerr <- abs(err / objects[j,k])
           
