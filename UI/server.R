@@ -239,8 +239,8 @@ shinyServer(function(input, output, session) {
         output[[name]] <- renderDygraph ({
           i_series <- list(
             time = object_numbers,
-            src = objects[[my_i]],
-            predicted = NN_series[[my_i]]
+            predicted = NN_series[[my_i]],
+            src = objects[[my_i]]
           );
           return(
               dygraph(i_series, main = colnames(NN_series)[my_i])

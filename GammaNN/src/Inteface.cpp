@@ -543,7 +543,7 @@ Rcpp::DataFrame first_step_prediction_test(NNptr R_NN, const Rcpp::DataFrame& fu
   //   }
   // } guard;
 
-  auto future_src = to_matrix(future_src_frame);
+  const auto future_src = to_matrix(future_src_frame);
 
   if (!R_NN) throw std::invalid_argument("R_NN is nullptr");
   if (future_src.width() != R_NN->get_object_dimention())
@@ -561,6 +561,9 @@ Rcpp::DataFrame first_step_prediction_test(NNptr R_NN, const Rcpp::DataFrame& fu
     i++;
     m[i] = NN[i + src_series_size];
   }
+
+  // std::cout << "future_src:\n" << future_src.to_string() << std::endl;
+  // std::cout << "m:\n" << m.to_string() << std::endl;
 
   return to_data_frame(m);
 }
