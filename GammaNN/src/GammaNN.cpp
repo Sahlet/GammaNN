@@ -39,6 +39,18 @@ namespace My {
 
       return gen_data[index - src_data.height()];
     }
+
+    void fix_object(UI index, GammaNN::object obj) {
+      if (index >= size()) throw std::out_of_range("Series: out_of_range in \"fix_object\"");
+      if (index < src_data.height()) {
+        src_data[index] = std::move(obj);
+        return;
+      }
+
+      auto index_for_gen = index - src_data.height();
+      gen_data.resize(index_for_gen + 1);
+      gen_data[index_for_gen] = std::move(obj);
+    }
   };
 
   class GammaUnit {
@@ -349,7 +361,7 @@ namespace My {
 
   void GammaNN::clear_learning() {
     for(auto& unit : members->units) {
-      unit.clear_and_next_n_times(get_src_series_size());
+      unit.clear_and_next_n_times(get_series_size());
     }
     members->p.release_buffer();
   }
@@ -377,6 +389,11 @@ namespace My {
     }
 
     return members->series[index];
+  }
+
+  void GammaNN::fix_object(UI index, GammaNN::object obj) {
+    members->series.fix_object(index, std::move(obj));
+    clear_learning();
   }
 
   GammaNN::GammaNN(const GammaNN& nn) {

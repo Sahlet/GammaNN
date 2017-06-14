@@ -483,3 +483,13 @@ void write_to_file(NNptr R_NN, std::string file_path) {
   std::ofstream f(file_path);
   R_NN->write_to_stream(f);
 }
+
+// [[Rcpp::export]]
+Rcpp::List test_first_step_prediction(NNptr R_NN, Rcpp::DataFrame future_src) {
+  //future_src - frame thet containes several future points
+  
+  // this function returns Rcpp::List of /*Rcpp::DataFrame*/
+
+  std::ofstream f(file_path);
+  R_NN->write_to_stream(f);
+}
