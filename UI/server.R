@@ -315,7 +315,10 @@ shinyServer(function(input, output, session) {
         i_series$src <- get_table()[numbers,i];
         
         for(j in 1:input$number_of_first_step_predictions) {
-          i_series[[paste0("s",j)]] <- c(
+          i_series[[
+            #paste0("s",j)
+            j+2
+            ]] <- c(
             rep(na_vec, left_window_size - 1), rep(na_vec, j - 1),
             get_table()[NN_src_series_length + j - 1, i], first_step_predictions[j,i],
             rep(na_vec, input$number_of_first_step_predictions - j)
