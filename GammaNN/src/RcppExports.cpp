@@ -128,3 +128,14 @@ RcppExport SEXP GammaNN_write_to_file(SEXP arg1, SEXP arg2) {
   return Rcpp::wrap(Rcpp::RObject());
   END_RCPP
 }
+
+
+//first_step_prediction_test
+Rcpp::DataFrame first_step_prediction_test(NNptr R_NN, const Rcpp::DataFrame& future_src_frame);
+RcppExport SEXP GammaNN_first_step_prediction_test(SEXP arg1, SEXP arg2) {
+  BEGIN_RCPP
+  return Rcpp::wrap(
+    first_step_prediction_test(Rcpp::as< NNptr >(arg1), Rcpp::as< Rcpp::DataFrame >(arg2))
+  );
+  END_RCPP
+}

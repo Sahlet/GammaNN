@@ -84,6 +84,11 @@ shinyServer(function(input, output, session) {
     return(result);
   });
   
+  output$first_step_forward_prediction_TAB_is_visible <- reactive({
+    return(!is.null(fields$NN) && (!is.null(get_table_from_file()) || !is.null(get_src_data_when_not_learned())));
+  });
+  outputOptions(output, 'first_step_forward_prediction_TAB_is_visible', suspendWhenHidden=FALSE);
+  
   observeEvent(input$training_data, {
     updateSliderInput(
       session, "batch_size",

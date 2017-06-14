@@ -79,6 +79,21 @@ fluidPage(
               radioButtons('src_data_sep', 'Separator', c( Space = '', Comma=',', Semicolon=';' ), ',')
             )
           )
+        ),
+        tabPanel(
+          "First step forward prediction",
+          br(),
+          conditionalPanel (
+            condition = "output.first_step_forward_prediction_TAB_is_visible",
+            sliderInput("number_of_first_step_predictions",
+                        label = "Number of first step predictions",
+                        min = 1, max = 5,
+                        value = 1,
+                        step = 1
+            ),
+            textOutput("mean_relative_error_for_test"),
+            textOutput("rmse_for_test")
+          )
         )
       )
     ),

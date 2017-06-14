@@ -15,7 +15,7 @@ namespace My {
 
   class Series {
     friend class GammaNN;
-    const My::matrix< double > src_data;
+    My::matrix< double > src_data;
     std::vector< GammaNN::object > gen_data;
   public:
 
@@ -404,6 +404,9 @@ namespace My {
   }
   GammaNN& GammaNN::operator=(const GammaNN& nn) {
     members.reset(new GammaNN_members(*nn.members));
+    for (auto& unit : this->members->units) {
+      unit.series_ptr = &this->members->series;
+    }
     return *this;
   }
   GammaNN& GammaNN::operator=(GammaNN&& nn) {
@@ -415,7 +418,7 @@ namespace My {
 
 #define SERIALIZE_MEMBERS(STREAM, MEMBERS)                       \
   STREAM                                                         \
-    & const_cast<My::matrix< double >&>(MEMBERS->series.src_data)\
+    & MEMBERS->series.src_data                                   \
     & MEMBERS->series.gen_data                                   \
     & MEMBERS->units                                             \
     & MEMBERS->trace_size                                        \

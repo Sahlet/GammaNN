@@ -63,3 +63,12 @@ write_to_file <- function(NN, file_path) {
         PACKAGE = 'GammaNN'
   );
 }
+
+#future_src - frame that containes several future points
+#this function returns data.frame with first step predictions using future_src parameter
+first_step_prediction_test <- function(NN, future_src_frame) {
+  .Call('GammaNN_first_step_prediction_test',
+        NN, future_src_frame,
+        PACKAGE = 'GammaNN'
+  );
+}

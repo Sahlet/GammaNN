@@ -484,12 +484,74 @@ void write_to_file(NNptr R_NN, std::string file_path) {
   R_NN->write_to_stream(f);
 }
 
-// [[Rcpp::export]]
-Rcpp::List test_first_step_prediction(NNptr R_NN, Rcpp::DataFrame future_src) {
-  //future_src - frame thet containes several future points
-  
-  // this function returns Rcpp::List of /*Rcpp::DataFrame*/
+Rcpp::DataFrame to_data_frame(const My::matrix< double >& m) {
+  Rcpp::DataFrame frame;
 
-  std::ofstream f(file_path);
-  R_NN->write_to_stream(f);
+  if (!m.width()) return frame;
+
+  std::vector< std::vector< double > > columns(m.width());
+  for (auto& column : columns) {
+    column.resize(m.height());
+  }
+
+  for (int j = 0; j < m.height(); j++) {
+    for (int i = 0; i < columns.size(); i++) {
+      columns[i][j] = m(j, i);
+    }
+  }
+
+  for (int i = 0; i < columns.size(); i++) {
+    frame.push_back(std::move(columns[i]), "V"+std::to_string(i));
+  }
+
+  return frame;
+}
+
+My::matrix< double > to_matrix(const Rcpp::DataFrame& frame) {
+  My::matrix< double > m(frame.ncol(), frame.nrow());
+
+  std::vector< Rcpp::NumericVector > columns(frame.ncol());
+
+  {
+    int i = 0;
+    for(auto& column : columns) {
+      column = frame[i++];
+    }
+  }
+
+  for (int j = 0; j < m.height(); j++) {
+    for (int i = 0; i < m.width(); i++) {
+      m(j, i) = columns[i][j];
+    }
+  }
+
+  return std::move(m);
+}
+
+// [[Rcpp::export]]
+Rcpp::DataFrame first_step_prediction_test(NNptr R_NN, const Rcpp::DataFrame& future_src_frame) {
+  //future_src - frame that containes several future points
+
+  //this function returns Rcpp::DataFrame with first step predictions using future_src parameter
+
+  auto future_src = to_matrix(future_src_frame);
+
+  if (!R_NN) throw std::invalid_argument("R_NN is nullptr");
+  if (future_src.width() != R_NN->get_object_dimention())
+    throw std::invalid_argument("future_src.width() != R_NN->get_object_dimention()");
+
+  My::matrix< double > m(future_src.width(), future_src.height() + 1);
+
+  My::GammaNN NN(*R_NN);
+
+  auto src_series_size = NN.get_src_series_size();
+
+  m[0] = NN[src_series_size];
+  for(int i = 0; i < future_src.height();) {
+    NN.fix_object(i + src_series_size, future_src[i]);
+    i++;
+    m[i] = NN[i + src_series_size];
+  }
+
+  to_data_frame(m);
 }
