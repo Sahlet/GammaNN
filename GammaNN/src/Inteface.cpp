@@ -534,6 +534,15 @@ Rcpp::DataFrame first_step_prediction_test(NNptr R_NN, const Rcpp::DataFrame& fu
 
   //this function returns Rcpp::DataFrame with first step predictions using future_src parameter
 
+  // struct guard_t {
+  //   guard_t() {
+  //     std::cout << "start first_step_prediction_test" << std::endl;
+  //   };
+  //   ~guard_t() {
+  //     std::cout << "end first_step_prediction_test" << std::endl;
+  //   }
+  // } guard;
+
   auto future_src = to_matrix(future_src_frame);
 
   if (!R_NN) throw std::invalid_argument("R_NN is nullptr");
@@ -553,5 +562,5 @@ Rcpp::DataFrame first_step_prediction_test(NNptr R_NN, const Rcpp::DataFrame& fu
     m[i] = NN[i + src_series_size];
   }
 
-  to_data_frame(m);
+  return to_data_frame(m);
 }
